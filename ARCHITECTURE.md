@@ -324,7 +324,8 @@ Alle Tabellen: `created_at`, `updated_at`, `deleted_at` (Soft Delete), `created_
 | Bereich | Entscheidung | Begründung |
 | --- | --- | --- |
 | Backend | TypeScript + Bun | ~50MB RAM Ziel (Baseline messen vor erstem Feature). Eine Sprache. Pi-freundlich. |
-| Frontend | SvelteKit (TypeScript) + **Svelte 5 (Runes)** + `adapter-static` (SPA-Mode) | Offline-First-PWA. `ssr = false` global. Kein SSR für personalisierte Daten. |
+| Frontend | SvelteKit (TypeScript) + **Svelte 5 (Runes)** + `adapter-static` (SPA-Mode) | Offline-First-PWA. `ssr = false` global. Kein SSR für personalisierte Daten. `+page.server.ts` ist verboten — alle `load()`-Funktionen in `+page.ts` und rufen ausschließlich die REST-API (`/api/v1/`) auf. |
+| Workout-Routing | **Single-Route `/workout`** (State-Machine) | Alle Workout-Zustände (Übung 1–N, Pause, Timer) sind Svelte-State. Ein SW-gecachter URL. WorkoutSummary = eigene Route `/workout/summary`. |
 | State Management | Svelte 5 Runes ($state-Klassen) via `setContext/getContext` | WorkoutSession, TimerState, AudioSettings als $state im `+layout.svelte`-Context. load() für Server-Daten. |
 | PWA | vite-plugin-pwa + Workbox | Pflicht ab Tag 1. Cache-First: App-Shell, Bilder. Network-First+Fallback (3s Timeout): Workout, Profil. |
 | IndexedDB | Dexie.js (~20KB) — Schema ab Version 1 | Pending-Operations-Queue, aktives Workout-Cache, Sync-Meta. Upgrade-Funktion pro Schema-Version. iOS-15.4-Bug bekannt + Sentinel-Check. |
@@ -394,11 +395,11 @@ Button, Card, Timer-Display, Exercise-Card, Progress-Bar, Modal
 
 | Kategorie | Komponente | Wofür |
 | --- | --- | --- |
-| **Workout** | `PauseScreen` | Countdown + Vorschau nächste Übung |
+| **Workout** | `PauseScreen` | Modal-Overlay in-tree innerhalb `/workout`. Timer **pausiert**. Kein eigener URL. Kein SW-Cache-Eintrag. Context (`TimerState`) via `getContext()` zugänglich. |
 | | `ExerciseGuide` | 3 Führungs-Level (Neu/Bekannt/Vertraut) |
-| | `WorkoutSummary` | Post-Workout (Streak, Volumen, Woche) |
-| | `ProgressDot` | Dot-Indikator: rein informativ, `role="status"`, `aria-label="Übung 2 von 7"`, aktiv/inaktiv durch Farbe + Größe (10px/6px) |
-| **Overlays** | `AudioSettingsOverlay` | Mid-workout, Timer läuft weiter |
+| | `WorkoutSummary` | Eigene Route `/workout/summary`. Erreichen dieser Route löscht `current_workout`. SW precacht `/workout/summary`. |
+| | `ProgressDot` | Dot-Indikator: rein informativ, `role="status"`, `aria-label="Übung 2 von 7"`, aktiv/inaktiv durch Farbe + Größe (10px/6px). Nicht interaktiv — kein Touch-Target erforderlich. |
+| **Overlays** | `AudioSettingsOverlay` | Modal-Overlay in-tree innerhalb `/workout`. Timer **läuft weiter**. In-tree (kein Portal) — `TimerState`-Context via `getContext()` zugänglich. |
 | | `Toast` | Sync-Fehler, Konflikte, Rate-Limit-Hinweise |
 | | `ConfirmDialog` | Destruktive Aktionen |
 | **Formulare** | `ChipGroup` | 10m / 20m / 30m / 60m, Zuhause / Gym (Segmented Control) |
@@ -426,6 +427,26 @@ interface AiProvider {
 type AiProviderResult =
   | { success: true; output: GeneratePlanOutput }
   | { success: false; reason: 'timeout' | 'rate_limit' | 'invalid_key' | 'invalid_output' | 'unknown'; retryAfterMs?: number }
+
+type GeneratePlanOutput = {
+  weeks: number                    // 3 oder 4
+  workoutsPerWeek: number          // 2–5
+  workouts: Array<{
+    name: string                   // z.B. "Workout A: Rücken + Core"
+    focusMuscleGroups: string[]    // min. 1 Element
+    estimatedDurationMinutes: number
+    exercises: Array<{
+      exerciseId: string           // UUID — muss in availableExerciseIds sein (semantische Validierung)
+      sets: number                 // 1–10
+      durationSeconds?: number     // bei zeitbasierten Übungen
+      reps?: number                // bei wiederholungsbasierten Übungen
+      restSeconds: number
+      order: number                // explizite Reihenfolge innerhalb des Workouts
+    }>                             // min. 1 Übung
+  }>                               // min. 2 Workouts
+}
+// Ajv prüft: Pflichtfelder, Typen, min/max-Constraints.
+// validatePlan() prüft danach: exerciseId in availableExerciseIds, Dauer, Warm-up/Cool-down, Muskelbalance.
 
 type GeneratePlanInput = {
   profile: UserProfile
@@ -524,8 +545,21 @@ Feedback und Trainingshistorie werden in PostgreSQL gespeichert und bei jeder Pl
 ```typescript
 // workout_queue: Pending-Operations (Set abgeschlossen, Workout beendet)
 // current_workout: Aktives Training gecacht beim Start-Tap
-// sync_meta: Letzter Sync-Zeitstempel, Offline-Status, PWA-Install-Banner-gesehen
+// sync_meta: Letzter Sync-Zeitstempel, Offline-Status, PWA-Install-Banner-gesehen, workout_active-Flag
 ```
+
+**`current_workout` Invalidierungsvertrag:**
+
+| Ereignis | Verhalten |
+| --- | --- |
+| WorkoutSummary-Route `/workout/summary` erreicht | `current_workout` löschen |
+| User wählt "Training abbrechen" | `current_workout` löschen |
+| iOS-15.4-Sentinel-Recovery | `current_workout` löschen + Resync |
+| Max-Age 24 Stunden überschritten | `current_workout` löschen + Toast "Training abgelaufen" |
+| Browserneustart | `current_workout` **bleibt** — Training kann fortgesetzt werden |
+| SW-Update während Training | `current_workout` **bleibt** — Schutz via `workout_active`-Flag (B2) |
+
+**Refresh auf `/workout`:** App prüft `current_workout` beim Mount. Vorhanden + < 24h → Training-State wiederherstellen. Vorhanden + > 24h → löschen + Toast + Redirect `/`. Leer → Redirect `/`.
 
 **Workout-Start-Tap → sofortiges Cachen:**
 
@@ -627,10 +661,10 @@ exercise_sources: exercise_id, source, external_id, imported_at
 | JWT-Rollen | Fehlender Claim → Default: User. OIDC_ROLE_CLAIM, OIDC_ADMIN_VALUE per .env konfigurierbar. |
 | Session | Serverseitige Session-Tabelle. Sofortige Invalidierung. Kein Token-Ablauf mid-workout. |
 | Admin-Bootstrap | BOOTSTRAP_ADMIN_EMAIL in .env. Notfall: `bun run cli promote-admin` |
-| CSRF | SameSite=Strict Cookie + Double-Submit-Cookie (X-CSRF-Token Header) + Origin-Header-Prüfung |
+| CSRF | SameSite=Strict Cookie + Double-Submit-Cookie (X-CSRF-Token Header) + Origin-Header-Prüfung. Token-Ausgabe: `GET /api/v1/auth/csrf` → Token im Response-Body + HttpOnly-Cookie. SPA holt Token beim App-Start; zentraler `fetch()`-Wrapper in `src/lib/api.ts` setzt `X-CSRF-Token`-Header automatisch bei POST/PUT/PATCH/DELETE. Token-Rotation bei jedem Login. |
 | Session-Expiry | max_age: 8h User / 1h Admin. Cleanup-Job alle 15 Min (`DELETE WHERE expires_at < NOW()`). |
 | Session-Indizes | `@@index([userId, expiresAt])`, `@@index([expiresAt])` |
-| Backchannel-Logout | `/api/v1/auth/backchannel-logout` — Authentik-Initiated Session-Termination |
+| Backchannel-Logout | `/api/v1/auth/backchannel-logout` — Authentik-Initiated Session-Termination. Validierung: (1) JWKS-URI beim App-Start fetchen + cachen (Rotation alle 24h, via `OIDC_JWKS_URI` in `.env`). (2) `logout_token` via JWKS signaturprüfen (RS256/ES256). (3) Claims validieren: `iss` (Authentik-Issuer), `aud` (Client-ID), `iat` (max. 5 Min alt), `jti` (Deduplizierung via kurzzeitigem In-Memory-Set gegen Replay). (4) Token mit `nonce`-Claim sofort ablehnen (OIDC-Spec-Anforderung). (5) Bei Erfolg: Session mit matching `sub` oder `sid` löschen. |
 | Passwort-Hashing | argon2 (`memoryCost: 19456`, `timeCost: 3`, `parallelism: 4`) |
 | Rate-Limiting | Sliding-Window (Token-Bucket). Response-Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`. |
 | Prompt-Injection | JSON-Quoting + 1.000-Zeichen-Limit + Steuer-Token-Erkennung → Generation abbrechen + Admin-Alert |
@@ -701,6 +735,7 @@ Git Push
 GitHub Actions
     ├── gitleaks (Secret-Scanning — erster Step)
     ├── biome check (Lint + Format)
+    ├── prisma generate (Client-Types erzeugen — vor tsc erforderlich)
     ├── tsc --noEmit (Typecheck)
     ├── prisma migrate diff --exit-code
     ├── bun test --coverage (Service-Layer: 80%, Router: 60%)
@@ -797,15 +832,26 @@ async completeWorkout(sessionId: string, userId: string) {
 - Integration: Cross-User-Zugriff (Meta-Test: alle Routen haben Auth-Guard oder stehen in Public-Allowlist), Offline-Sync-Idempotenz, Prisma-Middleware in $transaction (Coverage: 60%)
 - E2E: optional (Playwright)
 
-**SW-Update-Kommunikation (Training-aktiv):**
+**SW-Update-Koordination (Training-aktiv) via IndexedDB-Flag:**
+
+`navigator.serviceWorker.controller?.postMessage()` adressiert immer den aktiven SW — nicht den wartenden SW, der `skipWaiting()` zurückhält. Stattdessen: IndexedDB-Flag als gemeinsamer Zustand.
 
 ```typescript
-// App → Service Worker bei Training-Start
-navigator.serviceWorker.controller?.postMessage({ type: 'WORKOUT_ACTIVE' })
-// App → Service Worker bei Training-Ende
-navigator.serviceWorker.controller?.postMessage({ type: 'WORKOUT_COMPLETE' })
-// SW hält skipWaiting() zurück bis WORKOUT_COMPLETE
+// Dexie-Schema: sync_meta erweitert um workout_active: boolean
+
+// App bei Training-Start:
+await db.sync_meta.put({ key: 'workout_active', value: true })
+
+// App bei Training-Ende (WorkoutSummary erreicht oder Abbruch):
+await db.sync_meta.put({ key: 'workout_active', value: false })
+
+// Wartender SW in install-Event, vor skipWaiting():
+const meta = await db.sync_meta.get('workout_active')
+if (meta?.value === true) return // warten bis Training endet
+self.skipWaiting()
 ```
+
+Der wartende SW pollt `workout_active` in seinem `install`-Handler. Sobald das Flag `false` ist, aktiviert er sich. Vorteil gegenüber `postMessage`: IndexedDB ist persistent — der Zustand überlebt einen SW-Neustart.
 
 ---
 
