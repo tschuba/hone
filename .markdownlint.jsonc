@@ -1,0 +1,4 @@
+{
+  // MD013 line-length is impractical for Markdown tables
+  "MD013": false
+}
