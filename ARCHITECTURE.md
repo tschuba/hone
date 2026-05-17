@@ -50,11 +50,21 @@ Thomas ist erster Nutzer und Projekttreiber — sein Profil ist der Referenzfall
 | **Moderator** | Globale Übungen verwalten (erstellen, bearbeiten, Tags umbenennen) — keine Nutzerverwaltung |
 | **User** | Eigene Übungen, eigene Logs, eigenes Profil |
 
-**Rollen-Vergabe:** OIDC-Claims (Authentik-Gruppen → JWT → Hone-Rolle). Fehlender Claim → Default: User (niemals Admin). Fallback: Admin vergibt Rollen manuell.
+**Rollen-Vergabe:** OIDC ist immer autoritativ. OIDC-Claims (Authentik-Gruppen → JWT → Hone-Rolle). Fehlender Claim → Default: User (niemals Admin). Fallback: Admin vergibt Rollen manuell. OIDC kann Rollen jederzeit entziehen — DB-Rollen überschreiben OIDC nie.
 
-**Bootstrap:** Erster Admin wird über `BOOTSTRAP_ADMIN_EMAIL` in `.env` definiert. Notfall-Fallback: `bun run cli promote-admin --email <email>`.
+**Bootstrap:** Erster Admin wird über `BOOTSTRAP_ADMIN_EMAIL` in `.env` definiert — einmaliger Notfall-Mechanismus. Notfall-Fallback: `bun run cli promote-admin --email <email>`.
 
-**Session-Management:** Serverseitige Session-Tabelle in PostgreSQL. Sofortige Invalidierung möglich (DELETE aus Tabelle). OIDC-Rollen-Änderungen wirken beim nächsten Request. Kein Token-Ablauf während aktivem Training. Maximale Session-Gültigkeitsdauer: 8h für User, 1h für Admin (unabhängig vom letzten Request). OIDC Backchannel-Logout: `/api/v1/auth/backchannel-logout`-Endpoint empfängt `logout_token` von Authentik und löscht betroffene Sessions sofort.
+- `users.bootstrap_claimed BOOLEAN DEFAULT FALSE` — wird auf `true` gesetzt sobald der Bootstrap-Admin sich via OIDC mit Admin-Claim einloggt. Danach ist OIDC vollständig autoritativ.
+- Nach 48h ohne OIDC-Bestätigung → drei Warnebenen:
+  1. Server-Log beim Start: `[WARN] Bootstrap admin not yet claimed via OIDC`
+  2. Health-Endpoint-Flag: `{ "bootstrap_admin_unclaimed": true }`
+  3. Admin-Panel-Banner (sichtbar via lokalem Login-Fallback): "Setup unvollständig — OIDC-Bestätigung ausstehend"
+
+**Session-Management:** Serverseitige Session-Tabelle in PostgreSQL. Sofortige Invalidierung möglich (DELETE aus Tabelle). OIDC-Rollen-Änderungen wirken beim nächsten Request. Maximale Session-Gültigkeitsdauer: 8h für User, 1h für Admin (unabhängig vom letzten Request).
+
+**Session-Verlängerung beim Training:** Beim Training-Start-Tap wird `expires_at` verlängert um `user_max_session_minutes + 30 Min`, gedeckelt bei 4h ab `workout_session_started_at`. Vollständig unsichtbar für den Nutzer — verhindert Session-Ablauf und Datenverlust während des Trainings.
+
+OIDC Backchannel-Logout: `/api/v1/auth/backchannel-logout`-Endpoint empfängt `logout_token` von Authentik und löscht betroffene Sessions sofort.
 
 ---
 
@@ -116,12 +126,22 @@ Der Nutzer muss NICHTS auswählen um zu trainieren — ein Tap reicht.
 ```text
 Screen 1: Willkommen (~10 Sek)
 Screen 2: Ziele — Mehrfachauswahl (~30 Sek)
-Screen 3: Erstes Equipment-Set anlegen — Name (Default: "Zuhause") + Equipment-Auswahl, Pflichtfeld, min. "Körpergewicht" (~30 Sek)
+Screen 3: Erstes Equipment-Set anlegen — Name (Default: "Zuhause") + Equipment-Auswahl (~30 Sek)
+          Pflichtfeld, min. "Körpergewicht" (immer vorausgewählt, nicht abwählbar)
+
+          Equipment-Auswahl: Presets oben als Schnellauswahl:
+            [Nur Körpergewicht]  [Home Gym]  [Gym]
+          Darunter: gruppierte Liste zur manuellen Anpassung
+            ▼ Grundausstattung   ▼ Hanteln   ▼ Zugstangen   ▼ Geräte   ...
+          Gruppen sind rein visuell im Frontend — Tags bleiben flach in der DB.
+
 Screen 4: Einschränkungen — optional, überspringbar (~20 Sek)
           ⚠️ Disclaimer: "Die App erstellt Trainingspläne auf Basis deiner Angaben.
           Das ist kein medizinischer Rat. Bei diagnostizierten Erkrankungen oder
           akuten Schmerzen sprich zuerst mit einem Arzt."
-Screen 5: "Dein Plan ist bereit!" — sofort (<1 Sek, Regel-Fallback)
+Screen 5: "Dein Plan ist bereit!" — synchron: Regel-Plan wird beim Onboarding-Abschluss
+          generiert, Screen 5 erscheint erst wenn der Plan bereit ist.
+          Loading-Spinner als Fallback wenn die Generierung länger als erwartet dauert.
           [Jetzt starten →] als primäre Aktion
           Dezent darunter: "⚙ Wird noch von KI personalisiert..."
           → verschwindet sobald AI-Job fertig
@@ -288,17 +308,54 @@ App öffnen
 
 ```text
 Mesocyclus (3-4 Wochen Plan)
+    ├── status: 'active' | 'pending' | 'completed' | 'archived'
     ├── plan_source: 'rule_based' | 'ai_generated'
-    ├── pending_ai_plan_id: UUID | null  ← fertiger AI-Plan wartet auf Nutzer-Entscheidung
+    ├── pending_ai_plan_id: UUID | null  ← Selbstreferenz: fertiger KI-Mesocyclus (status='pending')
+    ├── next_template_id: UUID | null    ← explizite Rotation: nächstes WorkoutTemplate
     └── WorkoutTemplate (z.B. "Workout A: Rücken + Core")
+            ├── position: INT            ← explizite Reihenfolge in der Rotation
             └── WorkoutTemplateExercise (Übung X, Position 3, 45 Sek, 3 Sätze)
 
 WorkoutSession (ein konkretes Training)
     ├── mesocyclus_id
     ├── workout_template_id
     └── ExerciseLog (eine Übung in dieser Session)
+            ├── substituted_for_exercise_id: UUID | null  ← mid-workout Tausch (MVP)
             └── Set (satz_nr, duration_sek, reps optional, abgeschlossen)
+                ← Sets sind nach Sync unveränderlich (idempotenter Append per UUID)
 ```
+
+**Mesocyclus-Status-Übergänge:**
+
+```text
+Onboarding       → status='active',  plan_source='rule_based'
+AI-Job fertig    → neuer Mesocyclus status='pending', plan_source='ai_generated'
+                   aktiver Mesocyclus: pending_ai_plan_id → neuer Mesocyclus
+"Jetzt anwenden" → pending→active, aktiver→completed
+"Nächster Zyklus"→ pending bleibt pending, aktiviert wenn aktiver Mesocyclus endet
+Zyklus beendet   → active→completed, pending (falls vorhanden)→active
+```
+
+**next_template_id Setzungsregeln:**
+
+| Ereignis | next_template_id |
+| --- | --- |
+| Mesocyclus erstellt | Template mit `position = 1` |
+| Session abgeschlossen (Summary-Screen) | Nächstes Template (wrap-around) — in `$transaction` mit Session `status='completed'` |
+| "Heute aussetzen" | Unverändert |
+| AI-Plan angewendet | Template mit `position = 1` des neuen Plans |
+| Nutzer wählt manuell Workout X | Nach Abschluss: nächstes nach X in Rotation |
+
+**Abbruch-Logik:**
+
+- 0 abgeschlossene Übungen (kein ExerciseLog mit ≥ 1 Set) → still, zählt nicht, `next_template_id` unverändert
+- ≥ 1 abgeschlossene Übung → Dialog: "Du hast X von Y Übungen gemacht."
+  - [✓ Ja, als erledigt werten] → Rotation rückt vor
+  - [↩ Nein, nächstes Mal wiederholen] → `next_template_id` bleibt
+
+**Übungstausch (MVP):**
+
+Mid-workout Tausch: `ExerciseLog.substituted_for_exercise_id` zeigt auf die ursprüngliche Übung. Template bleibt unberührt. Pre-workout Tausch (Template-Ebene) ist Phase 2.
 
 **Neue Tabellen:**
 
@@ -318,13 +375,19 @@ pool_equipment                         ← Junction: Pool ↔ Equipment-Tags
 
 ai_jobs
     ├── id, status (pending/processing/done/failed/dead)
+    ├── user_id NOT NULL → users(id)
+    ├── source_mesocyclus_id UUID NULL → mesocyclus(id)  ← Kontext, bei Job-Start eingefroren
+    ├── job_type TEXT NOT NULL            ← z.B. 'generate_plan', erweiterbar
     ├── priority: 'normal' | 'feedback'  ← Feedback-Jobs haben Priorität in Queue
-    ├── attempts, last_error
+    ├── attempts, max_attempts            ← max_attempts konfigurierbar (Default 3)
+    ├── last_error
     ├── processing_started_at, locked_until  ← Heartbeat alle 2 Min
     └── created_at, processed_at
 
 ai_generation_logs
-    ├── mesocyclus_id, provider, prompt_version_id  ← bei Job-Start eingefroren
+    ├── source_mesocyclus_id UUID NULL  ← Kontext-Mesocyclus, bei Job-Start eingefroren
+    ├── result_mesocyclus_id UUID NULL  ← neu erstellter pending Mesocyclus (NULL bis fertig)
+    ├── provider, prompt_version_id     ← bei Job-Start eingefroren
     ├── validation_passed, balance_score (0-100)
     ├── duration_ms, fallback_used, injection_detected
     ├── input_tokens INT NULL, output_tokens INT NULL  ← Token-Transparenz für Admin
@@ -337,6 +400,7 @@ safety_keywords
 
 sessions (serverseitig)
     ├── id, user_id, expires_at
+    ├── workout_session_started_at TIMESTAMPTZ NULL  ← gesetzt beim Training-Start-Tap
     └── created_at, last_seen_at
 ```
 
@@ -366,6 +430,8 @@ Ein **Equipment Pool** ist eine benannte Sammlung von Equipment-Tags. Er hat kei
 - Beim Trainingsstart wählt der Nutzer einen Pool → Plan-Generierung filtert Übungen anhand der Equipment-Tags dieses Pools
 - "Zuhause" und "Gym" sind keine Sonderfelder mehr, sondern normale Pool-Einträge die beim Onboarding angelegt werden
 - Mindestens 1 Pool muss immer existieren (Löschen gesperrt bei letztem Eintrag)
+- **Letztes Equipment eines Pools:** Entfernen des letzten Equipment-Tags löscht nach Bestätigung auch den Pool. Ausnahme: letzter verbleibender Pool — dort ist das Entfernen gesperrt ("Mindestens ein Pool mit Equipment wird benötigt.")
+- **`last_used_at`** wird beim **Training-Start-Tap** gesetzt — nicht beim Auswählen des Pools in der ChipGroup. Gilt auch für vorausgewählte Pools die der Nutzer nicht explizit angefasst hat.
 
 ### Sortierung
 
@@ -400,25 +466,25 @@ Der Rest der 6-stufigen Filter-Pipeline (Equipment → Einschränkungen → Bala
 
 | Bereich | Entscheidung | Begründung |
 | --- | --- | --- |
-| Backend | TypeScript + Bun | ~50MB RAM Ziel (Baseline messen vor erstem Feature). Eine Sprache. Pi-freundlich. |
-| Frontend | SvelteKit (TypeScript) + **Svelte 5 (Runes)** + `adapter-static` (SPA-Mode) | Offline-First-PWA. `ssr = false` global. Kein SSR für personalisierte Daten. `+page.server.ts` ist verboten — alle `load()`-Funktionen in `+page.ts` und rufen ausschließlich die REST-API (`/api/v1/`) auf. |
+| Backend | TypeScript + Bun | < 100MB RAM Ziel (Baseline messen vor erstem Feature, realistisch 60–90MB). Eine Sprache. Pi-freundlich. Node.js-Fallback: Dockerfile-Swap (keine Bun-nativen APIs im Code). |
+| Frontend | SvelteKit (TypeScript) + **Svelte 5 (Runes)** + `adapter-static` (SPA-Mode) | Offline-First-PWA. `ssr = false` global. Kein SSR für personalisierte Daten. `+page.server.ts` ist verboten — alle `load()`-Funktionen in `+page.ts` und rufen ausschließlich die REST-API (`/api/v1/`) auf. **Trade-off:** Erster Besuch ohne Cache: 3-Request-Waterfall (HTML → JS → API). Ab zweitem Besuch: vollständig gecacht via Service Worker. |
 | Workout-Routing | **Single-Route `/workout`** (State-Machine) | Alle Workout-Zustände (Übung 1–N, Pause, Timer) sind Svelte-State. Ein SW-gecachter URL. WorkoutSummary = eigene Route `/workout/summary`. |
 | State Management | Svelte 5 Runes ($state-Klassen) via `setContext/getContext` | WorkoutSession, TimerState, AudioSettings als $state im `+layout.svelte`-Context. load() für Server-Daten. |
 | PWA | vite-plugin-pwa + Workbox | Pflicht ab Tag 1. Cache-First: App-Shell, Bilder. Network-First+Fallback (3s Timeout): Workout, Profil. |
 | IndexedDB | Dexie.js (~20KB) — Schema ab Version 1 | Pending-Operations-Queue, aktives Workout-Cache, Sync-Meta. Upgrade-Funktion pro Schema-Version. iOS-15.4-Bug bekannt + Sentinel-Check. |
-| Datenbank-ORM | PostgreSQL + Prisma + pgvector | Typsicher, Soft-Delete via Extension, pgvector für Phase-2-RAG. |
+| Datenbank-ORM | PostgreSQL + Prisma + pgvector + `@prisma/adapter-pg` | Typsicher, Soft-Delete via Extension, pgvector für Phase-2-RAG. **Bun-Pflicht:** `@prisma/adapter-pg` statt Standard-Binary-Query-Engine. `bun.lockb` + `package-lock.json` parallel pflegen für Node.js-Fallback. |
 | Authorization | Prisma Middleware + Defense-in-Depth | Jede Tabelle hat user_id NOT NULL. Alle Repo-Methoden mit expliziter `userId`-Injektion. ESLint-Regel blockiert $queryRaw/$executeRaw + $transaction ohne explizite userId. |
 | API-Typen | OpenAPI-Spec + openapi-typescript | Single Source of Truth. Automatisch generierte Types für Frontend + Backend. |
 | Linting/Format | Biome | Ein Tool für Lint + Format. Schneller als ESLint + Prettier. |
 | Deployment | Docker Compose + Coolify (Pi) | Raspberry Pi 5 + Ugreen NAS |
 | AI | Abstraktionsschicht — konfigurierbarer Provider | Default: Ollama auf NAS (`AI_BASE_URL` konfigurierbar). `AI_BASE_URL` ist in `production` required, in `development` optional — fehlt sie, bleibt AI-Worker inaktiv und Regel-Fallback übernimmt. Kein Vendor Lock-in. |
-| AI Queue | LISTEN/NOTIFY + 5-Min-Fallback-Poll + Heartbeat | ai_jobs Tabelle. Atomares Locking. Heartbeat alle 2 Min. Dead-Letter nach 3 Fehlern. |
+| AI Queue | LISTEN/NOTIFY + 5-Min-Fallback-Poll + Heartbeat | ai_jobs Tabelle. Atomares Locking. Heartbeat alle 2 Min. Dead-Letter nach `max_attempts` Fehlern (konfigurierbar, Default 3). |
 | Device-Services | Abstraktionsschicht für Browser-APIs | Wake Lock, Vibration, TTS hinter Service-Interface. Audio-Context-Unlock beim Training-Start. |
 | Timer | Date.now()-Delta + visibilitychange | Kein setInterval-Drift auf iOS. |
 | Auth | OIDC-first + serverseitige Session-Tabelle | Sofortige Invalidierung. Token-Ablauf nicht mid-workout. |
 | Passwort-Hashing | argon2 (nur lokaler Fallback) | `memoryCost: 19456`, `timeCost: 3`, `parallelism: 4` — Pi-freundlich (19MB statt 64MB). |
 | Offline | iOS 14+ Mindestversion, Wake Lock via Feature-Detection | Training ohne Internet. Workout-Daten beim Start-Tap cachen. |
-| Offline-Sync | UUID-Idempotenz, Queue-basiert, Server gewinnt (Session-Level) | iOS-kompatibel. Toast-Benachrichtigung bei Konflikt. |
+| Offline-Sync | Idempotenter Append per UUID, Queue-basiert | iOS-kompatibel. Sets nach Sync unveränderlich. Queue ist Transport-Buffer, kein dauerhafter Speicher. |
 | Bilder | WebP + JPEG-Fallback, max. 200KB, automatische Optimierung | Lazy Loading, Skeleton-Placeholder, 50 Bilder im Cache |
 | Performance | < 150KB JS (Warnung), < 250KB (CI-Fehler) | Vite chunkSizeWarningLimit. layerchart statt Chart.js. |
 | Skalierung | ~20 concurrent User auf Pi 5 / 8GB | Dokumentiertes Limit. mem_limit: 256m im docker-compose.yml. |
@@ -553,9 +619,11 @@ Regel-Fallback ist das sofortige Produkt — KI ist die stille Verbesserung.
 
 **Queue-Worker-Reaktion je Fehlertyp:**
 
-- `timeout` / `invalid_output` → max. 2 Retries, dann Regel-Fallback
+- `timeout` / `invalid_output` → Retry bis `attempts >= max_attempts`, dann Regel-Fallback
 - `rate_limit` mit `retryAfterMs` → Job requeuen
 - `invalid_key` → sofort Admin-Alert via Log + Health-Endpoint-Flag, kein Retry
+
+**Regel-Fallback bei `attempts >= max_attempts`:** Der Worker selbst erstellt den Regel-Plan-Mesocyclus, setzt Job-Status auf `dead` und löst Toast aus — alles in einer `$transaction`. `max_attempts` ist konfigurierbar (Default 3). Bedingung `>= max_attempts` statt `== 3`, damit auch ein Recovery-Versuch nach Heartbeat-Ablauf korrekt behandelt wird.
 
 ### Output-Validierung
 
@@ -596,13 +664,13 @@ ai_capability:
   last_error    TEXT NULL
 ```
 
-**Startup-Logik** (einmaliger String-Vergleich, kein LLM-Call):
+**Startup-Logik** — läuft **nie blockierend**. App startet sofort, Capability-Check läuft async im Hintergrund. Worker prüft beim Job-Start ob ein gecachtes Ergebnis vorliegt — ist keines da, fährt er mit `mesocyclus-simplified` fort.
 
 | Bedingung | Aktion |
 | --- | --- |
 | `tested_model` = aktuelles Modell AND `status = ok` | gecachten `prompt_type` direkt verwenden |
 | `tested_model` = aktuelles Modell AND `status = model_incapable` | `simplified` verwenden, kein Re-Test |
-| `tested_model` ≠ aktuelles Modell OR `status = infra_error` OR `status = pending` | Capability-Check ausführen |
+| `tested_model` ≠ aktuelles Modell OR `status = infra_error` OR `status = pending` | Capability-Check async starten, Worker nutzt `simplified` bis Ergebnis vorliegt |
 
 **Capability-Check:**
 
@@ -821,16 +889,25 @@ Feedback und Trainingshistorie werden in PostgreSQL gespeichert und bei jeder Pl
 2. Sofort an Server senden (wenn online) + bei Erfolg aus Queue entfernen
 3. Beim App-Öffnen: ausstehende Queue-Einträge zuerst senden, dann Server-State laden
 
+**Konfliktauflösung:** Sets sind nach Sync **unveränderlich**. Sync-Modell: **idempotenter Append per UUID** — Server akzeptiert ersten Write, ignoriert Duplikate mit bekannter UUID. Kein "Server gewinnt"-Szenario, da der Server bei laufenden Trainings typischerweise noch keine Daten hat. Zwei-Geräte-Gleichzeitigkeit: dokumentiertes v1-Limit, kein Handling nötig.
+
 **iOS-Besonderheiten:**
 
 - `visibilitychange`-Event: Timer-Delta neu berechnen nach Hintergrund
-- iOS-15.4-Bug: IndexedDB-Datenverlust bei App-Update (behoben in 15.4.1) — Sentinel-Check beim App-Start
-- Kein Background Sync → Foreground-Only via Queue
+- Kein Background Sync → Foreground-Only via Queue. Die Queue ist ein **Transport-Buffer, kein dauerhafter Speicher** — aggressiver Flush nach jedem Set schützt gegen Datenverlust.
+- **7-Tage-Eviction (Normalzustand, kein Bug):** Safari löscht alle PWA-Storage nach 7 Tagen ohne Nutzerinteraktion — kein Warning, kein Event. App ist darauf ausgelegt: Sentinel-Check greift, Server-Resync stellt Zustand wieder her.
+- **Storage-Druck:** Safari kann IndexedDB ohne Warnung löschen. `Dexie.open()` wrappen und `QuotaExceededError` explizit abfangen.
+- **iOS-15.4-Bug:** IndexedDB-Datenverlust bei App-Update (behoben in 15.4.1) — Zwei-Phasen-Sentinel-Check beim App-Start:
+  - Erster App-Start: `sentinel_pending` schreiben
+  - Nach abgeschlossenem Sync: `sentinel_ok` schreiben
+  - Beim nächsten Start: `sentinel_pending` oder fehlend → Wipe erkannt → Resync + Toast
+  - Statischer String als Sentinel-Wert (nicht App-Version — würde bei Updates fälschlich Wipe-Alarm auslösen)
+  - Bei erkanntem Wipe: `sync_queue`-Verlust dem Nutzer klar kommunizieren (Toast)
 
 **Service Worker Update-Strategie:**
 
 - Neuer SW verfügbar → Toast außerhalb des Trainings ("Update verfügbar")
-- Während aktivem Training: Update bewusst verzögern bis Training-Ende
+- Während aktivem Training: `workout_active = true` in `sync_meta` → `skipWaiting()` zurückhalten. Nach Training-Ende: `skipWaiting()` aufrufen + Reload. Das Flag kontrolliert den Zeitpunkt von `skipWaiting()`, nicht den SW selbst.
 - `/api/v1/` Prefix schützt Stale-SW vor Breaking-API-Changes
 
 ---
