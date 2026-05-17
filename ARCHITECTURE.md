@@ -34,11 +34,11 @@ Thomas ist erster Nutzer und Projekttreiber — sein Profil ist der Referenzfall
 
 - Name, Email (oder via OIDC)
 - Ziele (Muskelaufbau / Abnehmen / Fitness / Ausdauer — Mehrfachauswahl)
-- Heimequipment (Mehrfachauswahl, **Pflichtfeld** — mindestens "Körpergewicht")
-- Gym-Equipment (optional)
+- **Equipment-Pools** (benannte Sammlungen von Equipment-Tags — siehe [Equipment Pools](#equipment-pools))
 - Körperliche Einschränkungen (Auswahl: Knie / Schulter / Rücken / High-Impact + optionaler Freitext)
 - Bevorzugte Trainingsarten (Eigengewicht / Isometrie / Geräte / Cardio)
 - Session-Länge Präferenz
+- `pool_sort_mode`: `'auto'` (nach `last_used_at`) oder `'manual'` (Drag & Drop)
 
 ---
 
@@ -116,7 +116,7 @@ Der Nutzer muss NICHTS auswählen um zu trainieren — ein Tap reicht.
 ```text
 Screen 1: Willkommen (~10 Sek)
 Screen 2: Ziele — Mehrfachauswahl (~30 Sek)
-Screen 3: Equipment — Pflichtfeld, min. "Körpergewicht" (~30 Sek)
+Screen 3: Erstes Equipment-Set anlegen — Name (Default: "Zuhause") + Equipment-Auswahl, Pflichtfeld, min. "Körpergewicht" (~30 Sek)
 Screen 4: Einschränkungen — optional, überspringbar (~20 Sek)
           ⚠️ Disclaimer: "Die App erstellt Trainingspläne auf Basis deiner Angaben.
           Das ist kein medizinischer Rat. Bei diagnostizierten Erkrankungen oder
@@ -130,7 +130,7 @@ Screen 5: "Dein Plan ist bereit!" — sofort (<1 Sek, Regel-Fallback)
 
 **Safety-Keyword-Matching:** Freitext-Einschränkungen werden gegen `safety_keywords`-Tabelle (DB, admin-verwaltbar, mehrsprachig) geprüft. Treffer auf Risiko-Begriffe ("Bandscheibe", "Meniskus", "Operation", "Fraktur") → automatisch maximale MODIFIER-Filter + UI-Hinweis.
 
-Alles weitere (Gym-Equipment, Session-Länge) kommt ins Profil — optional, später.
+Alles weitere (zweiter Equipment-Pool z.B. "Gym", Session-Länge) kommt ins Profil — optional, später.
 
 ---
 
@@ -141,12 +141,12 @@ Alles weitere (Gym-Equipment, Session-Länge) kommt ins Profil — optional, sp�
 | # | Feature | Details |
 | --- | --- | --- |
 | 1 | **Multi-User Auth** | OIDC-first + lokaler Fallback (email + argon2). Bootstrap via .env. Instanz: offene/Invite-Registrierung konfigurierbar. |
-| 2 | **Nutzerprofil** | Ziele, Equipment (Home + Gym), Einschränkungen, Präferenzen — jederzeit änderbar |
+| 2 | **Nutzerprofil** | Ziele, Equipment-Pools, Einschränkungen, Präferenzen — jederzeit änderbar |
 | 2a | **Dynamische Ziele** | Ziele auf 3 Ebenen: Langfristig (Profil), Mesocyclus (4-Wochen-Fokus), Session (heute) |
 | 2b | **Ziel-Reaktion** | Profiländerung → Hinweis "Plan anpassen?" → sofort oder beim nächsten Zyklus |
 | 2c | **Session-Override** | Beim Training-Start: "Heute lieber..." (dezenter Link). Mehrfachauswahl: Fokus / Intensität / Typ. Nach 3 Overrides in Folge: "Plan anpassen?" |
 | 3 | **Tages-Workout** | Zeigt nächstes Workout in Rotation — kein fixer Wochentag |
-| 4 | **Trainingsort-Auswahl** | Beim Start: [Zuhause] [Gym] → Workout passt sich an Equipment an |
+| 4 | **Equipment-Pool-Auswahl** | Beim Start: ChipGroup mit allen Pools des Nutzers (sortiert nach `pool_sort_mode`). Zuletzt verwendeter Pool vorausgewählt. Ab 4 Pools: 2 sichtbar + `[··· mehr ▾]`-Overflow. Workout passt sich an Equipment des gewählten Pools an. |
 | 5 | **Zeit-Auswahl** | Beim Start: [10 Min] [20 Min] [30 Min] [60 Min] |
 | 6 | **Skalierbare Workouts** | Kern (funktioniert immer) + Schichten (je nach Zeit). Aufwärmen + Abkühlen skalieren mit. |
 | 7 | **Aufwärmen & Abkühlen** | Automatisch vor/nach jedem Workout. CATEGORY=Aufwärmen/Abkühlen, passend zum Fokus. Skaliert mit Zeit. Regel-basierter Fallback wenn KI nicht verfügbar. |
@@ -231,7 +231,7 @@ App öffnen
 │ Fokus: Rücken + Core     │
 │                          │
 │ Wo trainierst du?        │
-│ [Zuhause] [Gym]          │
+│ [Zuhause] [Gym] [···▾]  │  ← dynamisch aus Equipment-Pools
 │                          │
 │ Wie viel Zeit?           │
 │ [10m] [20m] [30m] [60m] │
@@ -303,6 +303,19 @@ WorkoutSession (ein konkretes Training)
 **Neue Tabellen:**
 
 ```text
+equipment_pools
+    ├── id, user_id
+    ├── name TEXT                      ← frei wählbar, z.B. "Zuhause", "Hotel"
+    ├── last_used_at TIMESTAMPTZ NULL  ← für auto-Sortierung
+    ├── sort_order INT NULL            ← nur relevant wenn pool_sort_mode = 'manual'
+    └── created_at, updated_at, deleted_at (Soft Delete)
+    [@@index: user_id]
+
+pool_equipment                         ← Junction: Pool ↔ Equipment-Tags
+    ├── pool_id → equipment_pools(id)
+    └── tag_id  → tags(id)  [WHERE type = 'EQUIPMENT']
+    [PRIMARY KEY: (pool_id, tag_id)]
+
 ai_jobs
     ├── id, status (pending/processing/done/failed/dead)
     ├── priority: 'normal' | 'feedback'  ← Feedback-Jobs haben Priorität in Queue
@@ -341,6 +354,45 @@ Alle Tabellen: `created_at`, `updated_at`, `deleted_at` (Soft Delete), `created_
 // Soft-Delete (Partial Index via raw migration)
 -- CREATE INDEX ON exercises (id) WHERE deleted_at IS NULL;
 ```
+
+---
+
+## Equipment Pools
+
+Ein **Equipment Pool** ist eine benannte Sammlung von Equipment-Tags. Er hat keinen inhärenten Ortsbezug — der Name ist frei wählbar ("Zuhause", "Gym", "Hotel", "Outdoor", …).
+
+### Konzept
+
+- Beim Trainingsstart wählt der Nutzer einen Pool → Plan-Generierung filtert Übungen anhand der Equipment-Tags dieses Pools
+- "Zuhause" und "Gym" sind keine Sonderfelder mehr, sondern normale Pool-Einträge die beim Onboarding angelegt werden
+- Mindestens 1 Pool muss immer existieren (Löschen gesperrt bei letztem Eintrag)
+
+### Sortierung
+
+| `pool_sort_mode` | Reihenfolge |
+| --- | --- |
+| `auto` (Default) | `ORDER BY last_used_at DESC NULLS LAST` |
+| `manual` | `ORDER BY sort_order ASC` |
+
+Beim ersten Drag & Drop in der Pool-Verwaltung: Wechsel auf `manual`, alle Pools erhalten `sort_order`-Werte basierend auf der aktuellen Auto-Reihenfolge. "Zurück zur automatischen Sortierung" setzt `pool_sort_mode` zurück auf `auto`.
+
+### Pool-Verwaltung (Profil/Einstellungen)
+
+- Liste aller Pools, per Drag & Drop sortierbar
+- Tippen → Name editieren + Equipment-Auswahl (MultiSelect)
+- `[+ Neues Set]`-Button
+- Löschen per Swipe/Kontextmenü (gesperrt beim letzten Pool)
+- "Automatisch sortieren"-Toggle
+
+### Auswirkung auf Plan-Generierung
+
+```sql
+-- availableExerciseIds für gewählten Pool:
+SELECT exercise_id FROM exercise_tags
+WHERE tag_id IN (SELECT tag_id FROM pool_equipment WHERE pool_id = :selectedPoolId)
+```
+
+Der Rest der 6-stufigen Filter-Pipeline (Equipment → Einschränkungen → Balance → Progression → Abwechslung → Aufwärmen/Abkühlen) bleibt unverändert.
 
 ---
 
@@ -475,7 +527,7 @@ type GeneratePlanOutput = {
 
 type GeneratePlanInput = {
   profile: UserProfile
-  availableExerciseIds: string[]    // nur gefilterte, sichere IDs
+  availableExerciseIds: string[]    // nur gefilterte, sichere IDs — aus gewähltem Equipment-Pool
   feedback?: MesocyclusFeedback
   recentHistory?: {
     adherenceRate: number            // letzte 2 Zyklen
@@ -525,18 +577,171 @@ Gemeinsame `validatePlan(plan: GeneratePlanOutput): ValidationResult`-Funktion �
 ai_prompts: id, type, content, version, is_active, created_by, created_at
 ```
 
-`type`-Werte: `mesocyclus` (Standard-Prompt), `mesocyclus-simplified` (Retry-Prompt für 3B-Modelle — kürzerer System-Prompt, max. 2 Workouts, max. 5 Übungen, kein Feedback-Kontext). Beide über Admin-UI editierbar.
-
-Initiales Template: `docs/prompts/mesocyclus-v1.md`. JSON-Schema im System-Prompt erzwingt strukturierten Output.
+`type`-Werte: `mesocyclus` (vollständiger Prompt für leistungsfähige Modelle), `mesocyclus-simplified` (kürzerer Prompt für schwächere Modelle — max. 2 Workouts, max. 5 Übungen, kein Feedback-Kontext). Beide über Admin-UI editierbar. Welcher Typ verwendet wird, bestimmt der Capability-Check (siehe [Prompt-Typ-Auswahl](#prompt-typ-auswahl)).
 
 `prompt_version_id` wird bei Job-Erstellung in `ai_jobs` eingefroren und in `ai_generation_logs` übernommen.
+
+### Prompt-Typ-Auswahl
+
+Welcher Prompt-Typ (`mesocyclus` oder `mesocyclus-simplified`) für einen Job verwendet wird, bestimmt ein einmaliger **Capability-Check** pro konfiguriertem Modell.
+
+**Gespeicherter Zustand** (in Admin-Config / DB):
+
+```text
+ai_capability:
+  tested_model  TEXT     -- z.B. "llama3.1:8b"
+  prompt_type   TEXT     -- "mesocyclus" | "mesocyclus-simplified" | null
+  status        TEXT     -- "ok" | "model_incapable" | "infra_error" | "pending"
+  tested_at     TIMESTAMPTZ
+  last_error    TEXT NULL
+```
+
+**Startup-Logik** (einmaliger String-Vergleich, kein LLM-Call):
+
+| Bedingung | Aktion |
+| --- | --- |
+| `tested_model` = aktuelles Modell AND `status = ok` | gecachten `prompt_type` direkt verwenden |
+| `tested_model` = aktuelles Modell AND `status = model_incapable` | `simplified` verwenden, kein Re-Test |
+| `tested_model` ≠ aktuelles Modell OR `status = infra_error` OR `status = pending` | Capability-Check ausführen |
+
+**Capability-Check:**
+
+- Direkter LLM-Call — **bypassed `ai_jobs`-Queue komplett**, kein Eintrag in `ai_generation_logs`, zählt nicht gegen Rate-Limits
+- Minimaler Test-Prompt mit dem vollständigen JSON-Schema und 2–3 Dummy-Übungs-IDs
+- Timeout: 60 Sek (unabhängig vom normalen Job-Timeout)
+
+**Ergebnis-Auswertung:**
+
+| LLM-Antwort | `status` | `prompt_type` | App-Verhalten |
+| --- | --- | --- | --- |
+| Valides JSON gemäß Schema | `ok` | `mesocyclus` | Normal |
+| `invalid_output` (Schema-Violation) | `model_incapable` | `mesocyclus-simplified` | Normal |
+| `timeout` / Verbindungsfehler | `infra_error` | unverändert / `null` | Fallback auf `simplified`, Admin-Warnung im Log + Health-Endpoint-Flag — App startet trotzdem |
+
+Bei `infra_error`: Beim nächsten Startup wird erneut versucht. App läuft weiter — kein harter Fehler.
+
+**Expliziter Override:**
+
+`.env AI_PROMPT_TYPE=mesocyclus|mesocyclus-simplified` überschreibt den Capability-Check vollständig. Nützlich wenn das Ergebnis bekannt ist oder manuell korrigiert werden soll.
+
+**CLI-Befehl** für manuellen Re-Test (z.B. nach Modellwechsel ohne Neustart):
+
+```bash
+bun run cli check-ai-capability
+```
+
+### Initialer Prompt (type: mesocyclus)
+
+System-Prompt — Platzhalter werden serverseitig vor dem API-Call ersetzt. Freitext-Felder (`{{…†}}`) werden als Daten-Strings eingebettet und sind durch die 1.000-Zeichen-Grenze + Injection-Prüfung vorab gesäubert.
+
+```text
+Du bist ein erfahrener Fitness-Trainer. Erstelle einen {{durationWeeks}}-Wochen-Trainingsplan
+(Mesocyclus) mit {{workoutsPerWeek}} Einheiten pro Woche.
+
+NUTZERPROFIL
+- Ziele: {{profile.goals}}
+- Einschränkungen: "{{profile.constraints†}}"
+- Bevorzugte Trainingsarten: {{profile.trainingTypes}}
+- Session-Länge: {{profile.sessionLengthMinutes}} Min (max. {{profile.sessionLengthMinutes * 1.2}} Min inkl. Puffer)
+
+AKTUELLER KONTEXT
+- Zykluswoche: {{currentWeek}} / {{durationWeeks}}
+{{#if feedback}}- Feedback letzter Zyklus: "{{feedback.text†}}" (Bewertung: {{feedback.ratings}}){{/if}}
+{{#if recentHistory}}- Trainingsregelmäßigkeit: {{recentHistory.adherenceRate}}%
+- Gemiedene Übungen (IDs): {{recentHistory.skippedExerciseIds}}
+- Session-Overrides: {{recentHistory.sessionOverrides}}{{/if}}
+
+VERFÜGBARE ÜBUNGEN
+Verwende ausschließlich IDs aus dieser Liste — keine anderen:
+{{availableExerciseIds}}
+
+PFLICHTREGELN
+1. Nur IDs aus VERFÜGBARE ÜBUNGEN verwenden
+2. Jedes Workout: min. 1 Aufwärm-Übung (CATEGORY=Aufwärmen) am Anfang,
+   min. 1 Abkühl-Übung (CATEGORY=Abkühlen) am Ende
+3. Keine Übung in zwei aufeinanderfolgenden Workouts derselben Woche
+4. Muskelgruppen-Balance über alle Workouts: Rücken+Core / Push / Pull+Mobility gleichmäßig
+5. Progression: Woche 1 hat weniger Sätze oder kürzere Dauer als Woche {{durationWeeks}}
+6. Übungen die einer Einschränkung entsprechen (z.B. "Knieschonend" bei Knie-Constraint):
+   maximal 2 Sets pro Workout
+7. Workout-Namen auf Deutsch, Format: "Workout A: Fokus1 + Fokus2"
+
+Antworte ausschließlich mit validem JSON gemäß diesem Schema:
+{{jsonSchema}}
+```
+
+**JSON-Schema** (`{{jsonSchema}}`-Platzhalter):
+
+```json
+{
+  "type": "object",
+  "required": ["weeks", "workoutsPerWeek", "workouts"],
+  "additionalProperties": false,
+  "properties": {
+    "weeks":           { "type": "integer", "minimum": 3, "maximum": 4 },
+    "workoutsPerWeek": { "type": "integer", "minimum": 2, "maximum": 5 },
+    "workouts": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["name", "focusMuscleGroups", "estimatedDurationMinutes", "exercises"],
+        "additionalProperties": false,
+        "properties": {
+          "name":                     { "type": "string" },
+          "focusMuscleGroups":        { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "estimatedDurationMinutes": { "type": "integer", "minimum": 5 },
+          "exercises": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["exerciseId", "sets", "restSeconds", "order"],
+              "additionalProperties": false,
+              "properties": {
+                "exerciseId":      { "type": "string" },
+                "sets":            { "type": "integer", "minimum": 1, "maximum": 10 },
+                "durationSeconds": { "type": "integer", "minimum": 5 },
+                "reps":            { "type": "integer", "minimum": 1 },
+                "restSeconds":     { "type": "integer", "minimum": 0 },
+                "order":           { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Initialer Prompt (type: mesocyclus-simplified)
+
+Für 3B-Modelle — kürzerer System-Prompt, kein Feedback-Kontext, engere Constraints.
+
+```text
+Du bist ein Fitness-Trainer. Erstelle einen {{durationWeeks}}-Wochen-Trainingsplan
+mit max. 2 Workouts und max. 5 Übungen pro Workout.
+
+Nutzerprofil: Ziele={{profile.goals}}, Einschränkungen="{{profile.constraints†}}",
+Session-Länge={{profile.sessionLengthMinutes}} Min
+
+Verfügbare Übungen (nur diese IDs verwenden):
+{{availableExerciseIds}}
+
+Regeln: Nur IDs aus der Liste. Aufwärmen am Anfang, Abkühlen am Ende jedes Workouts.
+Antworte ausschließlich mit validem JSON gemäß diesem Schema:
+{{jsonSchema}}
+```
+
+Gleiches JSON-Schema wie `mesocyclus`, aber `workouts.minItems: 1` und `exercises.maxItems: 5`.
 
 ### JSON-Output-Enforcement
 
 1. Ollama-API-Call mit `format: "json"` (Structured-Output-Mode)
 2. Ajv-JSON-Schema-Validator direkt nach LLM-Response, **vor** semantischer Validierung
 3. Parse-Fehler / Schema-Violation → sofort `invalid_output` → Retry-Pfad
-4. Bei 3B-Modellen: Retry mit vereinfachtem Prompt als separate Retry-Strategie
+4. `invalid_output` nach Retry → letzter Versuch mit `mesocyclus-simplified` als Safety-Net (unabhängig vom Capability-Check-Ergebnis)
 
 ### Prompt-Injection-Schutz
 
