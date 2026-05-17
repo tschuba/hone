@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Usage: ./scripts/install-agents.sh
 set -euo pipefail
 
 REPO_URL="https://github.com/msitarzewski/agency-agents.git"
@@ -30,17 +31,17 @@ WHITELIST=(
   "testing/testing-evidence-collector.md"
 )
 
-TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$WORK_DIR"' EXIT
 
 echo "Cloning agency-agents..."
-git clone --depth 1 --quiet "$REPO_URL" "$TMPDIR/agency-agents"
+git clone --depth 1 "$REPO_URL" "$WORK_DIR/agency-agents" || { echo "ERROR: git clone failed" >&2; exit 1; }
 
 mkdir -p "$DEST"
 
 count=0
 for file in "${WHITELIST[@]}"; do
-  src="$TMPDIR/agency-agents/$file"
+  src="$WORK_DIR/agency-agents/$file"
   if [[ -f "$src" ]]; then
     cp "$src" "$DEST/"
     (( count++ )) || true
@@ -48,5 +49,10 @@ for file in "${WHITELIST[@]}"; do
     echo "WARNING: not found: $file" >&2
   fi
 done
+
+if [[ $count -eq 0 ]]; then
+  echo "ERROR: no agents installed" >&2
+  exit 1
+fi
 
 echo "Done. $count agents installed to $DEST"

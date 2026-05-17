@@ -610,10 +610,13 @@ seeder:
 
 - Fetcht Daten zur Laufzeit von wger API + GitHub-Repos (free-exercise-db, exercises.json)
 - Verarbeitet: WebP-Konvertierung, Fuzzy-Match, Tag-Inferenz, Pause-Inferenz
-- **`INSERT ON CONFLICT (external_id) DO NOTHING`** — bestehende Übungen werden nie überschrieben
-- Einzige Ausnahme: Bilder werden ergänzt wenn `image = null`
-- Fortschritt via Docker-Logs / Coolify UI
+- **Change-Detection via sha256:** Hash über `(name, primaryMuscles, secondaryMuscles, equipment, category, difficulty)` — normalisiert (lowercase, trim, Arrays sortiert). Gespeichert in `exercise_sources.content_sha256`. Hash unverändert → Exercise übersprungen. Hash geändert → upsert + alle nicht-manuellen Tags neu berechnen.
+- `source='manual'`-Tags werden **nie** durch automatische Runs überschrieben
+- Bilder werden ergänzt wenn `image = null`
+- Fortschritt via Docker-Logs / Coolify UI mit Summary am Ende: `X importiert · Y getaggt · Z pending_review`
 - Monatlich als geplanter Job ausführbar für neue Übungen
+- **Atomare Writes:** Exercise-Upsert + Tag-Writes in einer `$transaction` pro Exercise — Crash hinterlässt keinen inkonsistenten Zustand
+- **Race-Condition-Schutz:** Seeder überspringt `status='pending_review'`, `status='rejected'` und `source='manual'`-Tags per Default. `--force`-Flag als explizites Override.
 
 ### Quellen
 
@@ -643,8 +646,10 @@ seeder:
 **Quell-Zuordnung (M:N):**
 
 ```text
-exercise_sources: exercise_id, source, external_id, imported_at
+exercise_sources: exercise_id, source, external_id, imported_at, content_sha256
 ```
+
+`content_sha256`: sha256 über `JSON.stringify({ name, primaryMuscles: [...].sort(), secondaryMuscles: [...].sort(), equipment: [...].sort(), category, difficulty })` — ermöglicht O(1)-Change-Detection bei Re-Imports.
 
 **Tag-Kategorien (M:N):**
 
@@ -653,7 +658,160 @@ exercise_sources: exercise_id, source, external_id, imported_at
 | MUSCLE_GROUP | Latissimus, Core, Schultern, Rücken, … |
 | EQUIPMENT | Klimmzugstange, Rudergerät, Körpergewicht, … |
 | CATEGORY | Isometrie, Kraft, Mobilität, Aufwärmen, Abkühlen |
-| MODIFIER | Knieschonend, Low-Impact, High-Impact, Anfänger, Fortgeschritten |
+| MODIFIER | Knieschonend, Rückenschonend, Schulterschonend, Low-Impact, High-Impact, Anfänger, Fortgeschritten |
+
+**Tags-Tabelle:**
+
+```sql
+tags (
+  id          UUID PRIMARY KEY
+  name        TEXT NOT NULL
+  type        TagType NOT NULL   -- MUSCLE_GROUP | EQUIPMENT | CATEGORY | MODIFIER
+  safety_bias TEXT NOT NULL DEFAULT 'exclude'  -- 'exclude' | 'include' (nur für MODIFIER relevant)
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+```
+
+`safety_bias = 'exclude'`: ungetaggte Übungen sind aus dem Constraint-Filter ausgeschlossen (Safe Default). Vom Seeder beim Tag-Upsert aus der Pipeline-Definition befüllt. Plan-Generator liest aus DB — keine Code-Kopplung nötig.
+
+**exercise_tags-Tabelle:**
+
+```sql
+exercise_tags (
+  exercise_id    UUID NOT NULL REFERENCES exercises(id)
+  tag_id         UUID NOT NULL REFERENCES tags(id)
+  source         ENUM('external','heuristic','llm','manual') NOT NULL
+  confidence     FLOAT NOT NULL DEFAULT 1.0   -- 1.0 = deterministisch, 0.6 = borderline, null wenn unknown
+  status         ENUM('confirmed','pending_review','rejected') NOT NULL
+  pending_reason ENUM(
+    'llm_unknown',        -- LLM: "ich weiß es nicht"
+    'llm_low_confidence', -- confidence < threshold
+    'llm_safety_policy',  -- "yes" auf injury-risk Tag → immer Review
+    'ensemble_disagree',  -- Call A ≠ Call B
+    'timeout',            -- Ollama hat nicht geantwortet
+    'llm_json_invalid',   -- Ajv-Validation fehlgeschlagen
+    'heuristic_unknown',  -- Heuristik: unknown, kein LLM-Fallback
+    'manual_queue'        -- Admin hat manuell in Queue gestellt
+  ) NULL                  -- NULL wenn status != 'pending_review'
+  llm_reasoning  TEXT NULL  -- LLM-Begründung, erhalten auch nach Admin-Confirm
+  reviewed_by    UUID NULL REFERENCES users(id) ON DELETE SET NULL
+  reviewed_at    TIMESTAMPTZ NULL
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  PRIMARY KEY (exercise_id, tag_id)
+)
+
+-- Indexes
+CREATE INDEX idx_exercise_tags_tag_status ON exercise_tags (tag_id, status);
+CREATE INDEX idx_exercise_tags_pending ON exercise_tags (exercise_id, tag_id)
+  WHERE status = 'pending_review';
+```
+
+**UI — Filter-Zähler statt Feature-Flag:**
+
+```text
+○ Knieschonend       (847 Übungen)
+○ Rückenschonend      (23 Übungen)
+○ Schulterschonend     (0 Übungen)
+```
+
+Kein Feature-Flag. Filter immer sichtbar. Nutzer entscheidet selbst ob die Menge nützlich ist. Zähler zeigt nur `status='confirmed'`-Einträge.
+
+### Tagging-Pipeline
+
+Jeder MODIFIER-Tag hat eine deklarative Pipeline-Definition. Neue Tag-Typen erfordern nur eine neue Definition + Migration — keine Strukturänderung.
+
+```typescript
+// src/seeder/config.ts
+export const TAGGING_CONFIG = {
+  LLM_CONFIRM_THRESHOLD: 0.85,  // --confidence-threshold CLI-Override möglich
+  LLM_TIMEOUT_MS:        90_000, // konfigurierbar via LLM_TIMEOUT_MS env
+  LLM_ENSEMBLE_CALLS:    2,
+}
+
+type HeuristicPipeline = {
+  tagType:    TagType
+  tier:       0 | 1
+  heuristic:  (ex: Exercise) => 'yes' | 'no' | 'unknown'
+  llmPrompt:  null
+  safetyBias: 'exclude' | 'include'
+}
+
+type LLMPipeline = {
+  tagType:    TagType
+  tier:       2
+  heuristic:  (ex: Exercise) => 'yes' | 'no' | 'unknown'
+  llmPrompt:  string   // nie null — Discriminated Union verhindert ungültige Zustände
+  safetyBias: 'exclude' | 'include'
+}
+
+type TaggingPipeline = HeuristicPipeline | LLMPipeline
+```
+
+**Tier-Übersicht:**
+
+| Tier | Quelle | Tags | Auto-Confirm |
+| --- | --- | --- | --- |
+| 0 | Externe Quelldaten | Anfänger (wger `difficulty=1`), Fortgeschritten (`difficulty=3`) | Ja — direkt aus Quelldaten |
+| 1 | Deterministischer Muscle-Heuristic | Knieschonend (keine quad/hamstring/calf/glute-Muskeln) | Ja — `confidence=1.0` |
+| 2 | LLM-Ensemble (2 Calls parallel) | Rückenschonend, Schulterschonend, Low-Impact, High-Impact | Nur bei Übereinstimmung beider Calls |
+| 3 | Admin Queue | Alles Unaufgelöste | Nein — `pending_review` |
+
+**LLM-Ensemble-Strategie (Tier 2):**
+
+Zwei unabhängige Ollama-Calls mit leicht verschiedenen Prompt-Formulierungen laufen parallel (`Promise.all`). Übereinstimmung beider Calls = auto-confirm. Divergenz = `pending_review`. Dies reduziert die Falsch-Positiv-Rate für Safety-Tags quadratisch.
+
+- `result: "no"` (beide) → auto-confirm — kein Verletzungsrisiko
+- `result: "yes"` (beide, confidence ≥ 0.85) → auto-confirm für Low/High-Impact
+- `result: "yes"` (beide) für injury-risk Tags (Rückenschonend, Schulterschonend, Knieschonend via LLM) → **immer** `pending_review` (`pending_reason: 'llm_safety_policy'`)
+- Divergenz → `pending_review` (`pending_reason: 'ensemble_disagree'`)
+- Timeout → `pending_review` (`pending_reason: 'timeout'`)
+
+**LLM-Output-Schema (pro Exercise, alle Tags in einem Call):**
+
+```json
+{
+  "impact":        "high" | "low" | "none" | "unknown",
+  "backSafety":    "safe" | "unsafe" | "unknown",
+  "kneeSafety":    "safe" | "unsafe" | "unknown",
+  "shoulderSafety":"safe" | "unsafe" | "unknown",
+  "difficulty":    "beginner" | "intermediate" | "advanced" | "unknown"
+}
+```
+
+Mutually-exclusive Konzepte (High-Impact / Low-Impact) teilen ein Feld — strukturell unmöglich widersprüchlich zu sein. Ajv validiert das Schema vor jeder Weiterverarbeitung; Validation-Fehler → `pending_review` (`pending_reason: 'llm_json_invalid'`).
+
+**LLM-Prompt-Design:**
+
+- System-Prompt mit medizinischer Framing-Instruktion: "Würde ein Physiotherapeut diese Übung bei [Verletzung] empfehlen?"
+- Tag-Definitionen auf Deutsch UND Englisch (Rückenschonend = kein Spinal Load, keine Scherbelastung — nicht: "Rückenmuskel involviert")
+- Hybrid Few-Shots: 2–3 hardcoded Baseline-Beispiele + bis zu 5 dynamische aus bereits bestätigten DB-Tags (Self-Improving)
+- Multilingual-Instruktion: intern immer auf Englisch denken, deutsche Inputs verstehen
+- Prompt versioniert in `ai_prompts`-Tabelle (type: `tagging-modifier`)
+
+**Seeder-CLI-Kommandos:**
+
+```bash
+bun run cli seed                           # Vollständiger Import + Tagging aller Quellen
+bun run cli seed --fixture-only            # Nur fixtures/exercises.json, kein Netzwerkzugriff
+bun run cli tag-batch --type=RUECKENSCHONEND             # Retroaktives Tagging für neuen Tag-Typ
+bun run cli tag-batch --type=X --force                   # Überschreibt auch confirmed-LLM-Tags
+bun run cli tag-batch --type=X --include-rejected        # Bezieht rejected-Tags ein (Re-Evaluation)
+bun run cli tag-batch --type=X --confidence-threshold=0.9 # Custom Threshold
+```
+
+**Laufzeit-Schätzung erster Seed-Run:** ~700k–1.2M Tokens total. Auf NAS ohne GPU (5–15 Tokens/Sek): 4–14h für den LLM-Anteil (~25–35% der Übungen). Progress-Output mit Restzeit-Schätzung ist verpflichtend. Folge-Runs übersprungen bereits getaggte Exercises → signifikant schneller.
+
+**Update-Semantik:**
+
+| Auslöser | Verhalten |
+| --- | --- |
+| content_sha256 geändert | Alle `source != 'manual'`-Tags invalidiert + neu berechnet |
+| Neuer Tag-Typ (Phase N+1) | `tag-batch --type=NEW` — nur neue Dimension, bestehende unberührt |
+| Heuristik-Logik geändert | `tag-batch --type=X --force` — überschreibt `source='heuristic'` |
+| LLM-Prompt geändert | `tag-batch --type=X --force` — überschreibt `source='llm'` |
+| Admin rejected | `status='rejected'` — niemals auto-überschrieben. Re-Entry via Admin-UI "Neu bewerten" oder `--include-rejected` |
 
 ---
 
