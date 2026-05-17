@@ -121,7 +121,11 @@ Screen 4: Einschränkungen — optional, überspringbar (~20 Sek)
           ⚠️ Disclaimer: "Die App erstellt Trainingspläne auf Basis deiner Angaben.
           Das ist kein medizinischer Rat. Bei diagnostizierten Erkrankungen oder
           akuten Schmerzen sprich zuerst mit einem Arzt."
-Screen 5: Plan wird generiert — Ladeanimation (~10-30 Sek)
+Screen 5: "Dein Plan ist bereit!" — sofort (<1 Sek, Regel-Fallback)
+          [Jetzt starten →] als primäre Aktion
+          Dezent darunter: "⚙ Wird noch von KI personalisiert..."
+          → verschwindet sobald AI-Job fertig
+          → beim nächsten App-Öffnen: "Plan optimiert ✓"
 ```
 
 **Safety-Keyword-Matching:** Freitext-Einschränkungen werden gegen `safety_keywords`-Tabelle (DB, admin-verwaltbar, mehrsprachig) geprüft. Treffer auf Risiko-Begriffe ("Bandscheibe", "Meniskus", "Operation", "Fraktur") → automatisch maximale MODIFIER-Filter + UI-Hinweis.
@@ -200,6 +204,23 @@ Alles weitere (Gym-Equipment, Session-Länge) kommt ins Profil — optional, sp�
 
 ## UX — Trainings-Flow (Handy)
 
+**Home-Screen bei aktivem Training** (`current_workout` in IndexedDB vorhanden + < 24h):
+
+```text
+┌──────────────────────────┐
+│ Hallo Thomas!            │
+│                          │
+│ ⚡ Training läuft        │
+│ Dead Hang — Übung 4/7   │
+│                          │
+│ [Fortsetzen →]           │  ← primäre, große Aktion
+│                          │
+│ Training beenden         │  ← dezent, sekundär
+└──────────────────────────┘
+```
+
+Navigation während Training: NICHT blockieren (kein `beforeNavigate` Guard). Recovery via `current_workout` in IndexedDB — Home-Screen macht Fortsetzen offensichtlich.
+
 ```text
 App öffnen
     │
@@ -267,6 +288,8 @@ App öffnen
 
 ```text
 Mesocyclus (3-4 Wochen Plan)
+    ├── plan_source: 'rule_based' | 'ai_generated'
+    ├── pending_ai_plan_id: UUID | null  ← fertiger AI-Plan wartet auf Nutzer-Entscheidung
     └── WorkoutTemplate (z.B. "Workout A: Rücken + Core")
             └── WorkoutTemplateExercise (Übung X, Position 3, 45 Sek, 3 Sätze)
 
@@ -282,6 +305,7 @@ WorkoutSession (ein konkretes Training)
 ```text
 ai_jobs
     ├── id, status (pending/processing/done/failed/dead)
+    ├── priority: 'normal' | 'feedback'  ← Feedback-Jobs haben Priorität in Queue
     ├── attempts, last_error
     ├── processing_started_at, locked_until  ← Heartbeat alle 2 Min
     └── created_at, processed_at
@@ -290,6 +314,7 @@ ai_generation_logs
     ├── mesocyclus_id, provider, prompt_version_id  ← bei Job-Start eingefroren
     ├── validation_passed, balance_score (0-100)
     ├── duration_ms, fallback_used, injection_detected
+    ├── input_tokens INT NULL, output_tokens INT NULL  ← Token-Transparenz für Admin
     └── created_at
 
 safety_keywords
@@ -463,6 +488,17 @@ type GeneratePlanInput = {
 }
 ```
 
+### Plan-Generierungs-Strategie
+
+Regel-Fallback ist das sofortige Produkt — KI ist die stille Verbesserung.
+
+- Onboarding: Regel-Plan (<1 Sek) → Nutzer kann sofort trainieren. AI-Job läuft im Hintergrund (Ollama ohne GPU: 2–7 Min). AI-Plan fertig → "Plan optimiert ✓" beim nächsten App-Öffnen.
+- KI-Plan fertig + Mesocyclus bereits gestartet → **NIEMALS stiller Ersatz:**
+  - Feedback "Zu leicht" / "Zu schwer" → aktiv anbieten: "Wir haben einen besseren Plan — jetzt wechseln oder beim nächsten Zyklus?"
+  - Feedback "Genau richtig" → KI-Plan für nächsten Mesocyclus aufheben, nichts fragen
+  - Kein Feedback noch → beim nächsten App-Öffnen (außerhalb Training): "Dein Plan wurde personalisiert. Jetzt anwenden?" [Ja / Beim nächsten Zyklus]
+- NIEMALS: Frage oder Ersatz während aktivem Training
+
 **Queue-Worker-Reaktion je Fehlertyp:**
 
 - `timeout` / `invalid_output` → max. 2 Retries, dann Regel-Fallback
@@ -527,6 +563,7 @@ Status-Lifecycle: pending → processing → done
                                     failed → (retry, max 3) → dead
 ```
 
+- Feedback-Jobs (`priority='feedback'`): Zählen nicht gegen per-User-Tages-Limit. Zählen gegen globales Tages-Limit. Werden vor `priority='normal'`-Jobs verarbeitet. App trackt Tokens in `ai_generation_logs` — Admin berechnet Kosten selbst anhand Provider-Pricing.
 - Atomares Job-Locking: `UPDATE ai_jobs SET status='processing' WHERE id=? AND status='pending' RETURNING *`
 - Heartbeat alle 2 Minuten erneuert `locked_until`
 - Verwaiste Jobs (`locked_until < now()`): zurück auf `pending`
@@ -828,7 +865,7 @@ bun run cli tag-batch --type=X --confidence-threshold=0.9 # Custom Threshold
 | Session-Expiry | max_age: 8h User / 1h Admin. Cleanup-Job alle 15 Min (`DELETE WHERE expires_at < NOW()`). |
 | Session-Indizes | `@@index([userId, expiresAt])`, `@@index([expiresAt])` |
 | Backchannel-Logout | `/api/v1/auth/backchannel-logout` — Authentik-Initiated Session-Termination. Validierung: (1) JWKS-URI beim App-Start fetchen + cachen (Rotation alle 24h, via `OIDC_JWKS_URI` in `.env`). (2) `logout_token` via JWKS signaturprüfen (RS256/ES256). (3) Claims validieren: `iss` (Authentik-Issuer), `aud` (Client-ID), `iat` (max. 5 Min alt), `jti` (Deduplizierung via kurzzeitigem In-Memory-Set gegen Replay). (4) Token mit `nonce`-Claim sofort ablehnen (OIDC-Spec-Anforderung). (5) Bei Erfolg: Session mit matching `sub` oder `sid` löschen. |
-| Passwort-Hashing | argon2 (`memoryCost: 19456`, `timeCost: 3`, `parallelism: 4`). 19MB statt OWASP-empfohlener 64MB — bewusster Trade-off für Raspberry Pi 5. Threat-Model: Angreifer braucht bereits DB-Zugriff (self-hosted, ~20 Nutzer). Konfigurierbar via `ARGON2_MEMORY_COST`-Env-Variable für Instanzen mit mehr RAM. |
+| Passwort-Hashing | argon2 (`memoryCost: 19456`, `timeCost: 3`, `parallelism: 4`). 19MB statt OWASP-empfohlener 64MB — bewusster Trade-off für Raspberry Pi 5. Betrifft nur den lokalen Auth-Fallback — OIDC-Nutzer (Authentik) berühren argon2 nicht. Threat-Model: Angreifer braucht bereits DB-Zugriff (self-hosted, ~20 Nutzer). Konfigurierbar via `ARGON2_MEMORY_COST`-Env-Variable. `.env.example` enthält Kommentar: Standard 19456 (Pi), empfohlen 65536 (64MB, OWASP) für Instanzen mit mehr RAM. |
 | Rate-Limiting | Sliding-Window (Token-Bucket). Response-Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`. |
 | Prompt-Injection | Alle User-Freitext-Inputs werden serverseitig per `text.normalize('NFKC')` normalisiert (Homoglyph-Schutz) bevor Zeichenlimit und Steuer-Token-Erkennung greifen. JSON-Quoting + 1.000-Zeichen-Limit + Steuer-Token-Erkennung ("ignore", "system:", "###") → Generation abbrechen + Admin-Alert. Gilt auch für Seed-Dateien: `description`-Felder werden beim Import identisch sanitisiert; Seed-PRs erfordern Security-Review-Label. |
 | Safety-Keywords | DB-Tabelle, admin-verwaltbar, mehrsprachig. Keyword-Match → maximale MODIFIER-Filter + UI-Hinweis. |
@@ -855,12 +892,23 @@ bun run cli tag-batch --type=X --confidence-threshold=0.9 # Custom Threshold
   "aiProvider": "ollama | openai | ...",
   "aiProviderStatus": "ok | degraded | unavailable",
   "fallbackActive": false,
-  "aiQueue": { "pending": 0, "dead": 0 },
+  "aiQueue": {
+    "pending": 0,
+    "dead": 0,
+    "estimatedWaitMinutes": 0
+  },
+  "aiUsageToday": {
+    "jobs": 0,
+    "inputTokens": 0,
+    "outputTokens": 0
+  },
   "backup": "ok | last_failed | never_run",
   "backupLastSuccess": "2026-05-15T03:00:00Z",
   "version": "1.0.0"
 }
 ```
+
+`estimatedWaitMinutes`: Median von `duration_ms` der letzten 20 erfolgreichen Jobs (7 Tage). Kein historischer Wert → Default 5 Min. Berechnung: verbleibende Zeit laufender Job + pending × Median. Nutzer-Anzeige: "gleich fertig" (< 2 Min) / "ca. 5 Min" / "ca. 15 Min" (grobe Stufen).
 
 - `/debug` Screen (**Admin-only**, Auth-Guard-geschützt): Browser-API-Verfügbarkeit, Sync-Status, letzte Sync-Zeit, Dead-Job-Liste (Fehlergrund + User-ID + Zeitstempel) — für Remote-Support
 
