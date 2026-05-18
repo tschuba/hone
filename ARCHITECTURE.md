@@ -55,6 +55,9 @@ Thomas ist erster Nutzer und Projekttreiber — sein Profil ist der Referenzfall
 **Bootstrap:** Erster Admin wird über `BOOTSTRAP_ADMIN_EMAIL` in `.env` definiert — einmaliger Notfall-Mechanismus. Notfall-Fallback: `bun run cli promote-admin --email <email>`.
 
 - `users.bootstrap_claimed BOOLEAN DEFAULT FALSE` — wird auf `true` gesetzt sobald der Bootstrap-Admin sich via OIDC mit Admin-Claim einloggt. Danach ist OIDC vollständig autoritativ.
+
+**Kritische Invariante:** `bootstrap_claimed = true` wird **ausschließlich** gesetzt wenn der Nutzer sich via **OIDC** einloggt und einen gültigen Admin-Role-Claim trägt. Ein lokaler Passwort-Login mit der `BOOTSTRAP_ADMIN_EMAIL`-Adresse verleiht **keine** Admin-Rechte — lokaler Login ohne OIDC-Bestätigung: `role` bleibt `'user'`. Der `promote-admin`-CLI-Befehl ist ein separater, explizit vom Operator ausgeführter Notfall-Mechanismus und kein Ersatz für den OIDC-Bootstrap-Pfad.
+
 - Nach 48h ohne OIDC-Bestätigung → drei Warnebenen:
   1. Server-Log beim Start: `[WARN] Bootstrap admin not yet claimed via OIDC`
   2. Health-Endpoint-Flag: `{ "bootstrap_admin_unclaimed": true }`
@@ -162,7 +165,7 @@ Alles weitere (zweiter Equipment-Pool z.B. "Gym", Session-Länge) kommt ins Prof
 | --- | --- | --- |
 | 0 | **Übungsdatenbank-Seeding** | hone-seeder Docker Container. Quellen: wger (GPL v3 + CC-BY-SA), free-exercise-db (Public Domain), exercises.json/wrkout (Public Domain) — Attribution im Impressum Pflicht. Tagging: Tier 0 (externe Quelldaten) + Tier 1 (deterministischer Heuristik, z.B. Knieschonend). Kein LLM-Tagging im MVP (→ Phase 2). Monatlich als geplanter Job wiederholbar. |
 | 1 | **Multi-User Auth** | OIDC-first + lokaler Fallback (email + argon2). Bootstrap via .env. Instanz: offene/Invite-Registrierung konfigurierbar. |
-| 2 | **Nutzerprofil** | Ziele (Profil-Ebene), Equipment-Pools, Einschränkungen, Präferenzen — jederzeit änderbar. `goals`-Feld als `{ scope: 'profile' \| 'mesocyclus' \| 'session', value: string }[]` modellieren — MVP befüllt nur `scope: 'profile'` (verhindert API-Breaking-Change in Phase 2). |
+| 2 | **Nutzerprofil** | Ziele (Profil-Ebene), Equipment-Pools, Einschränkungen, Präferenzen — jederzeit änderbar. `goals`-Feld als `{ scope: 'profile' \| 'mesocyclus' \| 'session', value: string }[]` modellieren — MVP befüllt nur `scope: 'profile'` (verhindert API-Breaking-Change in Phase 2). Gespeichert als **JSONB-Spalte** auf `users` (`users.goals JSONB NOT NULL DEFAULT '[]'`) — kein separates Tabellenmodel, vermeidet JOIN beim häufigsten Lesefall. Phase 4 fügt neue Scopes per INSERT ein, kein `ALTER TABLE`. |
 | 3 | **Tages-Workout** | Zeigt nächstes Workout in Rotation — kein fixer Wochentag |
 | 4 | **Equipment-Pool-Auswahl** | Beim Start: ChipGroup mit allen Pools des Nutzers, sortiert nach `last_used_at DESC`. Zuletzt verwendeter Pool vorausgewählt. Ab 4 Pools: 2 sichtbar + `[··· mehr ▾]`-Overflow. Workout passt sich an Equipment des gewählten Pools an. Manuelle Sortierung (Drag & Drop): Phase 2. |
 | 5 | **Zeit-Auswahl** | Beim Start: [10 Min] [20 Min] [30 Min] [60 Min] |
@@ -351,7 +354,31 @@ Mesocyclus (3-4 Wochen Plan)
     └── WorkoutTemplate (z.B. "Workout A: Rücken + Core")
             ├── position: INT            ← explizite Reihenfolge in der Rotation
             └── WorkoutTemplateExercise (Übung X, Position 3, 45 Sek, 3 Sätze)
+```
 
+```prisma
+model WorkoutTemplateExercise {
+  id                String          @id @default(uuid())
+  workoutTemplateId String
+  workoutTemplate   WorkoutTemplate @relation(fields: [workoutTemplateId], references: [id])
+  exerciseId        String
+  exercise          Exercise        @relation(fields: [exerciseId], references: [id])
+  position          Int             // explizite Reihenfolge, 1-basiert
+  sets              Int             // Anzahl Sätze (1–10)
+  durationSeconds   Int?            // für zeitbasierte Übungen (Isometrie)
+  reps              Int?            // für wiederholungsbasierte Übungen (Orientierungsrahmen)
+  restSeconds       Int?            // Override: rest_seconds → exercise.suggested_rest_seconds → Profil-Default (15s)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([workoutTemplateId])
+  @@index([exerciseId])
+}
+```
+
+`durationSeconds` und `reps` sind beide optional — mindestens eines muss gesetzt sein (Application-Level-Constraint, geprüft in `validatePlan()` in `shared/plan-validation.ts`).
+
+```text
 WorkoutSession (ein konkretes Training)
     ├── mesocyclus_id
     ├── workout_template_id
@@ -359,6 +386,21 @@ WorkoutSession (ein konkretes Training)
             ├── substituted_for_exercise_id: UUID | null  ← mid-workout Tausch (MVP)
             └── Set (satz_nr, duration_sek, reps optional, abgeschlossen)
                 ← Sets sind nach Sync unveränderlich (idempotenter Append per UUID)
+```
+
+**WorkoutSession.status-Werte:**
+
+```text
+'active'    — Training läuft (IndexedDB + Server)
+'completed' — Summary-Screen erreicht, Rotation vorgerückt
+'abandoned' — Training beendet ohne abgeschlossene Übung (stille Aufzeichnung, keine Rotation)
+
+Übergangsregeln:
+  Training-Start-Tap → 'active'
+  Summary-Screen     → 'completed' (in $transaction mit next_template_id-Update)
+  0 Sets abgeschlossen → 'abandoned' (still, kein Dialog)
+  ≥ 1 Set, Abbruch   → Dialog: "Ja, als erledigt werten" → 'completed' + Rotation
+                        "Nein, nächstes Mal" → 'abandoned'
 ```
 
 **Mesocyclus-Status-Übergänge:**
@@ -466,6 +508,8 @@ Alle Tabellen: `created_at`, `updated_at`, `deleted_at` (Soft Delete), `created_
 -- workout_templates: CREATE INDEX ON workout_templates (mesocyclus_id);
 -- sets: CREATE INDEX ON sets (exercise_log_id);
 -- ai_jobs: CREATE INDEX ON ai_jobs (user_id);  ← bereits im Schema-Block oben
+-- ai_jobs: CREATE INDEX ON ai_jobs (status, priority, created_at) WHERE status = 'pending';
+--          ← Partial Index für Job-Claim-Query (FOR UPDATE SKIP LOCKED: status='pending', ORDER BY priority DESC, created_at ASC)
 -- pool_equipment: CREATE INDEX ON pool_equipment (tag_id);  ← bereits oben
 
 // Partial Indexes (Soft Delete) — via raw migration:
@@ -983,6 +1027,16 @@ Alle Daten (Template + Exercises + Tags + Bilder-URLs) in einem Datenbankaufruf 
 **Sync-Flow:**
 
 1. Nutzer schließt Set ab → sofort in `workout_queue` schreiben
+
+   **HTTP-Contract (idempotente Set-Erstellung):**
+
+   ```http
+   POST /api/v1/workout-sessions/:sessionId/sets
+   Body: { uuid, exerciseLogId, setNr, durationSek, reps? }
+   ```
+
+   Der Client generiert `uuid` (UUIDv4) lokal beim Set-Abschluss. Server prüft: existiert `uuid` bereits → `200 OK` (idempotente Bestätigung); existiert nicht → `201 Created`. `4xx`-Fehler (außer `429`) werden nicht retried. `429` → exponentieller Backoff, max. 5 Versuche.
+
 2. Sofort an Server senden (wenn online) + bei Erfolg aus Queue entfernen
 3. Beim App-Öffnen: ausstehende Queue-Einträge zuerst senden, dann Server-State laden
 
@@ -1036,12 +1090,16 @@ Alle Daten (Template + Exercises + Tags + Bilder-URLs) in einem Datenbankaufruf 
 # docker-compose.yml
 seeder:
   image: ghcr.io/user/hone-seeder:latest
-  depends_on: [db]
+  depends_on:
+    hone-backend:
+      condition: service_healthy  # Garantiert: Migrationen applied, Schema bereit
   environment:
     DATABASE_URL: ...
     STORAGE_TYPE: ...
   restart: "no"
 ```
+
+**Migration-Ownership:** Der `hone-seeder`-Container führt **keine** Migrationen aus. `prisma migrate deploy` läuft ausschließlich im `hone-backend`-Container beim Start. Der Seeder setzt voraus, dass das Schema bereits angewendet ist — daher `condition: service_healthy` statt `depends_on: [db]`.
 
 - Fetcht Daten zur Laufzeit von wger API + GitHub-Repos (free-exercise-db, exercises.json)
 - Verarbeitet: WebP-Konvertierung, Fuzzy-Match, Tag-Inferenz, Pause-Inferenz
@@ -1248,6 +1306,8 @@ bun run cli tag-batch --type=X --confidence-threshold=0.9 # Custom Threshold
 | LLM-Prompt geändert | `tag-batch --type=X --force` — überschreibt `source='llm'` |
 | Admin rejected | `status='rejected'` — niemals auto-überschrieben. Re-Entry via Admin-UI "Neu bewerten" oder `--include-rejected` |
 
+**Upsert-Guard für `source='manual'`:** Der PK `(exercise_id, tag_id)` erlaubt nur einen Eintrag pro Übung/Tag-Kombination. Die Seeder-Upsert-Logik prüft **vor** jedem Write: `SELECT source FROM exercise_tags WHERE exercise_id = ? AND tag_id = ?`. Wenn `source = 'manual'` → Skip (kein Update, kein Überschreiben). Diese Prüfung gilt auch bei `--force`. Einzige Ausnahme: `--include-manual` (explizites Flag, nie in regulären Runs gesetzt). Die Invariante lebt in der Anwendungslogik des Seeders und muss durch einen Unit-Test abgedeckt sein.
+
 ---
 
 ## Sicherheit
@@ -1262,9 +1322,9 @@ bun run cli tag-batch --type=X --confidence-threshold=0.9 # Custom Threshold
 | CSRF | SameSite=Strict Cookie + Double-Submit-Cookie (X-CSRF-Token Header) + Origin-Header-Prüfung. Token-Ausgabe: `GET /api/v1/auth/csrf` → Token im Response-Body + HttpOnly-Cookie. SPA holt Token beim App-Start; zentraler `fetch()`-Wrapper in `src/lib/api.ts` setzt `X-CSRF-Token`-Header automatisch bei POST/PUT/PATCH/DELETE. Token-Rotation bei jedem Login. |
 | Session-Expiry | max_age: 8h User / 1h Admin. Cleanup-Job alle 15 Min (`DELETE WHERE expires_at < NOW() LIMIT 1000` — verhindert Lock-Eskalation bei Nachholbedarf). |
 | Session-Indizes | `@@index([userId, expiresAt])`, `@@index([expiresAt])` |
-| Backchannel-Logout | `/api/v1/auth/backchannel-logout` — Authentik-Initiated Session-Termination. Validierung: (1) JWKS-URI beim App-Start fetchen + cachen. Cache-TTL: `JWKS_CACHE_TTL_SECONDS` (Default: 3600 = 1h, via `.env` konfigurierbar — Self-Hosted kann erhöhen). (2) `logout_token` via JWKS signaturprüfen (RS256/ES256). (3) Claims validieren: `iss`, `aud`, `iat` (max. 5 Min alt), `jti` (Deduplizierung via `used_logout_tokens`-Tabelle — persistent über Restarts, Cleanup alle 15 Min: `DELETE WHERE used_at < NOW() - INTERVAL '10 minutes'`). (4) Token mit `nonce`-Claim sofort ablehnen. (5) Bei Erfolg: Session löschen. |
+| Backchannel-Logout | `/api/v1/auth/backchannel-logout` — Authentik-Initiated Session-Termination. Validierung: (1) JWKS-URI beim App-Start fetchen + cachen. Cache-TTL: `JWKS_CACHE_TTL_SECONDS` (Default: 3600 = 1h, via `.env` konfigurierbar — Self-Hosted kann erhöhen). **kid-basierter Cache-Miss:** Schlägt Signaturprüfung fehl weil der `kid` des Token-Headers nicht im gecachten JWKS ist → sofortiger Cache-busting-Refetch (einmalig, kein Retry-Loop); bei erneutem Fehlschlag → 400. Verhindert, dass Authentik-Key-Rotation die Logout-Verarbeitung bis zu 1h blockiert. (2) `logout_token` via JWKS signaturprüfen (RS256/ES256). (3) Claims validieren: `iss`, `aud`, `iat` (max. 5 Min alt), `jti` (Deduplizierung via `used_logout_tokens`-Tabelle — persistent über Restarts, Cleanup alle 15 Min: `DELETE WHERE used_at < NOW() - INTERVAL '10 minutes'`). (4) Token mit `nonce`-Claim sofort ablehnen. (5) Bei Erfolg: Session löschen. |
 | Passwort-Hashing | argon2 (`memoryCost: 19456`, `timeCost: 3`, `parallelism: 2`). 19MB statt OWASP-empfohlener 64MB — bewusster Trade-off für ressourcenbeschränkte Systeme. `parallelism: 2` statt 4 — verhindert CPU-Bottleneck bei parallelen Logins. Betrifft nur den lokalen Auth-Fallback — OIDC-Nutzer berühren argon2 nicht. Konfigurierbar: `ARGON2_MEMORY_COST`, `ARGON2_PARALLELISM`. `.env.example` enthält Kommentar mit OWASP-Empfehlung und Pi-Trade-off-Erklärung. Admin-UI zeigt Hinweis wenn unter OWASP-Empfehlung (65536 / parallelism 4). |
-| Rate-Limiting | In-Memory Sliding-Window (Token-Bucket). Response-Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`. Reset bei Neustart akzeptiert (Single-Instance). |
+| Rate-Limiting | **Zwei Rate-Limiter:** (1) **Authenticated (User-ID-Key):** 100 Req/Min — für alle Routen nach Auth-Middleware. (2) **Unauthenticated (IP-Key):** Separate Middleware **vor** dem Auth-Schritt — schützt `/api/v1/auth/login`, `/api/v1/auth/register`, `/api/v1/auth/forgot-password`. Limit: 10 Req/Min/IP, verhindert Brute-Force ohne Session-Token. **Trusted-Proxy / Real-IP:** IP-Limiter liest `X-Real-IP` (von Traefik gesetzt). `X-Forwarded-For` wird nicht direkt vertraut. Localhost/Dev: `req.socket.remoteAddress` als Fallback. In-Memory Sliding-Window, Response-Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`. Reset bei Neustart akzeptiert (Single-Instance). |
 | Prompt-Injection | Alle User-Freitext-Inputs werden serverseitig per `text.normalize('NFKC')` normalisiert (Homoglyph-Schutz) bevor Zeichenlimit und Steuer-Token-Erkennung greifen. JSON-Quoting + 1.000-Zeichen-Limit + Steuer-Token-Erkennung via `safety_keywords`-Tabelle (DB, mehrsprachig, inkl. deutsche Keywords: "ignoriere", "vergiss alle", "neues system") → Generation abbrechen + Admin-Alert. Keyword-Blocking ist Frühwarnschicht, kein vollständiger Schutz — echter Schutz liegt im ID-Whitelist-System. Gilt auch für Seed-Dateien. |
 | Safety-Keywords | DB-Tabelle, admin-verwaltbar, mehrsprachig (DE + EN). Keyword-Match → maximale MODIFIER-Filter + UI-Hinweis. |
 | Medizinischer Disclaimer | Screen 4 (Einschränkungen) + expliziter Hinweis vor Plan-Generierung |
