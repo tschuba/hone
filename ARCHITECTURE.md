@@ -186,34 +186,66 @@ Alles weitere (zweiter Equipment-Pool z.B. "Gym", Session-Länge) kommt ins Prof
 | 23 | **GDPR-Minimalexport** | `GET /api/v1/users/me/export` — JSON-Dump aller eigenen Daten. Account-Löschung via Admin-CLI (`bun run cli delete-user --email <email>`, kaskadierendes Delete aller user_id-Tabellen). Self-Service-UI (Export-Button, Konto-Löschung im Profil): Phase 2. |
 | 24 | **Device-Services-Abstraktionsschicht** | Interface für Wake Lock, Vibration, TTS vollständig definiert. MVP implementiert nur Wake Lock. Vibration + TTS als No-Op-Implementierungen — Phase 2 tauscht sie aus ohne Umbau der Aufrufer. |
 
-### Phase 2 — Should Have
+### Phase 2 — Trainings-Erfahrung
+
+*Auslöser: Erste echte Trainingswochen abgeschlossen.*
 
 | # | Feature | Details |
 | --- | --- | --- |
-| 25 | **Fortschritts-Tracking** | Trainings-Streak, Volumen über Zeit, Aktivitäts-Kalender |
-| 26 | **Körperdaten** | Gewicht + Bauchumfang manuell eintragen, Verlauf als Chart |
-| 27 | **Motivations-Badge** | In-App Hinweis bei langem Aussetzen — nur in Post-Workout-Summary oder Weekly-Summary, nie im aktiven Training |
-| 28 | **Hands-Free Modus** | Web Audio API (Töne, unterbricht keine Musik). Web Speech API (TTS, best-effort, Deutsch). Vibration API (Feature-Detection — kein iOS). Auto-Advance. Countdown-Töne (10s / 5s / 3-2-1 / Ende). Audio-Context-Unlock beim Training-Start-Tap (iOS-Anforderung). |
-| 29 | **Audio-Einstellungen** | Unabhängige Toggles: Sprachansagen (TTS) / Töne+Beeps / Vibration / Auto-Advance. Kombinierbar. Presets als Schnellauswahl. Mid-Workout wechselbar via Overlay — Timer läuft weiter. |
-| 30 | **Hands-Free Navigation** | Auto-Advance AN: Dot-Indikator (rein informativ, ARIA: role="status"), vertikale Swipe-Gesten. Auto-Advance AUS: Fortschrittsbalken, 3-Punkt-Menü. |
-| 31 | **Adaptive Übungsführung** | Führungs-Level: Neu (Bild groß + vollständige Beschreibung + Tipps) / Bekannt (Bild klein + Kurztext) / Vertraut (nur Name + Ton). Re-Familiarisierung nach >3-4 Wochen Pause. Level-Override `'neu'` aus `ExerciseGuide` entfernen und Level-Tracking aktivieren. |
-| 32 | **Dynamische Ziele (3 Ebenen)** | Ziele auf 3 Ebenen: Langfristig (Profil), Mesocyclus (4-Wochen-Fokus), Session (heute). `goals`-Array-Scopes `'mesocyclus'` + `'session'` befüllen. |
-| 33 | **Ziel-Reaktion** | Profiländerung → Hinweis "Plan anpassen?" → sofort oder beim nächsten Zyklus |
-| 34 | **Session-Override** | Beim Training-Start: "Heute lieber..." (dezenter Link). Mehrfachauswahl: Fokus / Intensität / Typ. Nach 3 Overrides in Folge: "Plan anpassen?" |
-| 35 | **Erweiterte Offline-Sync** | Konfliktresolution (Server gewinnt auf Session-Level, Toast-Benachrichtigung). Letzter Sync-Zeitstempel sichtbar im UI. |
-| 36 | **Seeder Tier 2 (LLM-Tagging)** | LLM-Ensemble (Ollama) für Rückenschonend, Schulterschonend, Low-Impact, High-Impact. Aktiviert Impact-Filter (#10) vollständig. |
-| 37 | **GDPR Self-Service** | Export-Button im Profil (JSON/CSV). Konto-Löschung selbst auslösbar. Attribution gelöschter Übungen anonymisieren. |
-| 38 | **Data Retention** | Trainings-Logs dauerhaft. Admin kann instanz-weite Policy konfigurieren. Nutzer kann einzelne Trainings oder Zeiträume löschen. |
-| 39 | **Apple Health (Shortcuts)** | Nach Training: ein Tap → iOS Shortcut → schreibt Typ/Dauer/kcal zu Apple Health. |
-| 40 | **Ernährungsplan** | AI-generiert, Kalorienziel, Makros, Vorlieben/Abneigungen |
-| 41 | **Admin-Panel** | Nutzerverwaltung, Instanz-Einstellungen, Registrierung an/aus, AI Rate-Limit-Konfiguration, Papierkorb-Ansicht für gelöschte Übungen |
+| 25 | **Seeder Tier 2 (LLM-Tagging)** | LLM-Ensemble (Ollama) für Rückenschonend, Schulterschonend, Low-Impact, High-Impact. Aktiviert Impact-Filter (#10) vollständig. |
+| 26 | **Hands-Free Modus** | Web Audio API (Töne, unterbricht keine Musik). Web Speech API (TTS, best-effort, Deutsch). Vibration API (Feature-Detection — kein iOS). Auto-Advance. Countdown-Töne (10s / 5s / 3-2-1 / Ende). Audio-Context-Unlock beim Training-Start-Tap (iOS-Anforderung). |
+| 27 | **Audio-Einstellungen** | Unabhängige Toggles: Sprachansagen (TTS) / Töne+Beeps / Vibration / Auto-Advance. Kombinierbar. Presets als Schnellauswahl. Mid-Workout wechselbar via Overlay — Timer läuft weiter. |
+| 28 | **Hands-Free Navigation** | Auto-Advance AN: Dot-Indikator (rein informativ, ARIA: role="status"), vertikale Swipe-Gesten. Auto-Advance AUS: Fortschrittsbalken, 3-Punkt-Menü. |
+| 29 | **Adaptive Übungsführung** | Führungs-Level: Neu (Bild groß + vollständige Beschreibung + Tipps) / Bekannt (Bild klein + Kurztext) / Vertraut (nur Name + Ton). Re-Familiarisierung nach >3-4 Wochen Pause. Level-Override `'neu'` aus `ExerciseGuide` entfernen und Level-Tracking aktivieren. |
+
+### Phase 3 — Fortschritt sehen
+
+*Auslöser: ~4–6 Wochen Training, genug Daten vorhanden.*
+
+| # | Feature | Details |
+| --- | --- | --- |
+| 30 | **Fortschritts-Tracking** | Trainings-Streak, Volumen über Zeit, Aktivitäts-Kalender |
+| 31 | **Körperdaten** | Gewicht + Bauchumfang manuell eintragen, Verlauf als Chart |
+| 32 | **Motivations-Badge** | In-App Hinweis bei langem Aussetzen — nur in Post-Workout-Summary oder Weekly-Summary, nie im aktiven Training |
+| 33 | **Erweiterte Offline-Sync** | Konfliktresolution (Server gewinnt auf Session-Level, Toast-Benachrichtigung). Letzter Sync-Zeitstempel sichtbar im UI. |
+
+### Phase 4 — Intelligentere Planung
+
+*Auslöser: Genug Trainingshistorie für einen stabilen Feedback-Loop.*
+
+| # | Feature | Details |
+| --- | --- | --- |
+| 34 | **Dynamische Ziele (3 Ebenen)** | Ziele auf 3 Ebenen: Langfristig (Profil), Mesocyclus (4-Wochen-Fokus), Session (heute). `goals`-Array-Scopes `'mesocyclus'` + `'session'` befüllen. |
+| 35 | **Ziel-Reaktion** | Profiländerung → Hinweis "Plan anpassen?" → sofort oder beim nächsten Zyklus |
+| 36 | **Session-Override** | Beim Training-Start: "Heute lieber..." (dezenter Link). Mehrfachauswahl: Fokus / Intensität / Typ. Nach 3 Overrides in Folge: "Plan anpassen?" |
+| 37 | **RAG für AI-Plangeneration** | pgvector bereits aktiviert. Semantische Suche über Trainingshistorie und Feedback für bessere Langzeit-Personalisierung. |
+
+### Phase 5 — Betrieb & Wachstum
+
+*Auslöser: Mehr als 2–3 Nutzer auf der Instanz.*
+
+| # | Feature | Details |
+| --- | --- | --- |
+| 38 | **GDPR Self-Service** | Export-Button im Profil (JSON/CSV). Konto-Löschung selbst auslösbar. Attribution gelöschter Übungen anonymisieren. |
+| 39 | **Data Retention** | Trainings-Logs dauerhaft. Admin kann instanz-weite Policy konfigurieren. Nutzer kann einzelne Trainings oder Zeiträume löschen. |
+| 40 | **Admin-Panel** | Nutzerverwaltung, Instanz-Einstellungen, Registrierung an/aus, AI Rate-Limit-Konfiguration, Papierkorb-Ansicht für gelöschte Übungen |
+
+### Phase 6 — Polishing
+
+*Auslöser: Kern stabil, keine offenen Bugs.*
+
+| # | Feature | Details |
+| --- | --- | --- |
+| 41 | **Apple Health (Shortcuts)** | Nach Training: ein Tap → iOS Shortcut → schreibt Typ/Dauer/kcal zu Apple Health. |
 | 42 | **Light Mode** | System-Theming (Dark/Light). Nachrüstbar wenn CSS Tokens von Anfang an sauber. |
-| 43 | **RAG für AI-Plangeneration** | pgvector bereits aktiviert. Semantische Suche über Trainingshistorie und Feedback für bessere Langzeit-Personalisierung. |
 
-### Phase 3 — Optional
+### Phase 7 — Neue Domänen
+
+*Auslöser: Bewusste Entscheidung, den Scope zu erweitern.*
 
 | # | Feature | Details |
 | --- | --- | --- |
+| 43 | **Ernährungsplan** | AI-generiert, Kalorienziel, Makros, Vorlieben/Abneigungen |
 | 44 | **Capacitor-Wrapper (iOS)** | Nativer HealthKit-Zugriff. Benötigt Apple Developer Account (99€/Jahr). |
 | 45 | **A/B-Testing AI-Pläne** | Für größere Nutzerbasis. Daten bereits in `ai_generation_logs`. |
 
@@ -463,7 +495,7 @@ Ein **Equipment Pool** ist eine benannte Sammlung von Equipment-Tags. Er hat kei
 
 MVP: Immer `ORDER BY last_used_at DESC NULLS LAST`. Kein `pool_sort_mode`-Toggle, kein `sort_order`-Feld im MVP.
 
-**Phase 2:** Manueller Sort-Modus + Drag & Drop. Beim ersten Drag & Drop wechselt die Instanz auf `manual`, alle Pools erhalten `sort_order`-Werte. "Zurück zur automatischen Sortierung" setzt zurück auf `auto`.
+**Phase 6 (Polishing):** Manueller Sort-Modus + Drag & Drop. Beim ersten Drag & Drop wechselt die Instanz auf `manual`, alle Pools erhalten `sort_order`-Werte. "Zurück zur automatischen Sortierung" setzt zurück auf `auto`.
 
 ### Pool-Verwaltung (Profil/Einstellungen)
 
@@ -471,7 +503,7 @@ MVP: Immer `ORDER BY last_used_at DESC NULLS LAST`. Kein `pool_sort_mode`-Toggle
 - Tippen → Name editieren + Equipment-Auswahl (MultiSelect)
 - `[+ Neues Set]`-Button
 - Löschen per Swipe/Kontextmenü (gesperrt beim letzten Pool)
-- Drag & Drop + "Automatisch sortieren"-Toggle: Phase 2
+- Drag & Drop + "Automatisch sortieren"-Toggle: Phase 6
 
 ### Auswirkung auf Plan-Generierung
 
@@ -547,7 +579,7 @@ Der Rest der 6-stufigen Filter-Pipeline (Equipment → Einschränkungen → Bala
 | ChipGroup | Selected: `--color-accent` als Background + `--color-accent-text`. Unselected: Surface + Border. |
 | SkeletonLoader | Shimmer: `90deg gradient`, 1.5s ease-in-out infinite. `prefers-reduced-motion`: statisch ohne Animation. |
 | Bilder | WebP, Lazy Loading, Skeleton-Placeholder, Offline-Fallback: Lucide-Icon |
-| Dark Mode | MVP: nur Dark. Light Mode in Phase 2 via CSS Custom Properties. Alle Token semantisch benannt (`--color-background` nicht `--color-slate-900`). `data-theme="dark"` am :root. |
+| Dark Mode | MVP: nur Dark. Light Mode in Phase 6 (#42) via CSS Custom Properties. Alle Token semantisch benannt (`--color-background` nicht `--color-slate-900`). `data-theme="dark"` am :root. |
 
 ---
 
@@ -959,7 +991,7 @@ Alle Daten (Template + Exercises + Tags + Bilder-URLs) in einem Datenbankaufruf 
 **Phase-Abgrenzung:**
 
 - **MVP:** Queue als Transport-Buffer + UUID-Idempotenz. Kein Last-Sync-Timestamp im UI.
-- **Phase 2 (#35):** Erweiterter Konfliktresolution für Mehrgerate-Szenarien. Last-Sync-Zeitstempel sichtbar im UI. Toast-Benachrichtigung bei Konflikten (nie während aktivem Training).
+- **Phase 3 (#33):** Erweiterter Konfliktresolution für Mehrgeräte-Szenarien. Last-Sync-Zeitstempel sichtbar im UI. Toast-Benachrichtigung bei Konflikten (nie während aktivem Training).
 
 **iOS-Besonderheiten:**
 
@@ -1038,7 +1070,7 @@ seeder:
 | Privat | User | nur Ersteller | Ersteller (Soft Delete) | nur Ersteller |
 
 - Soft Delete: Prisma-Extension filtert `deleted_at IS NULL` automatisch
-- Wiederherstellung: `bun run cli restore-exercise --id <id>` (MVP), Admin-Papierkorb in Phase 2
+- Wiederherstellung: `bun run cli restore-exercise --id <id>` (MVP), Admin-Papierkorb in Phase 5 (#40)
 - Hard-Delete: nur für nicht-referenzierte Datensätze (nie wenn in Logs referenziert)
 - In Logs referenzierte Übungen: kein Hard-Delete, immer erhalten
 
