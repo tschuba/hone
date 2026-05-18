@@ -1,0 +1,21 @@
+{
+  "name": "hone",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "bun@1.2.15",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "bun test",
+    "typecheck": "bun --filter '*' run typecheck",
+    "dev:api": "bun --filter @hone/api run dev",
+    "dev:web": "bun --filter @hone/web run dev"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.6",
+    "typescript": "^5.8.3"
+  }
+}

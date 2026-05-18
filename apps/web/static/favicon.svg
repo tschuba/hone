@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Hone</title>
+  <rect width="64" height="64" rx="16" fill="#1a1a2e" />
+  <path d="M18 46V18h8v10h12V18h8v28h-8V35H26v11z" fill="#fcd34d" />
+</svg>
