@@ -8,9 +8,9 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "bun test",
-    "typecheck": "bun --filter '*' run typecheck",
-    "dev:api": "bun --filter @hone/api run dev",
-    "dev:web": "bun --filter @hone/web run dev"
+    "typecheck": "PATH=\"$HOME/.bun/bin:$PATH\" bun run --cwd apps/api typecheck && PATH=\"$HOME/.bun/bin:$PATH\" bun run --cwd apps/web typecheck && PATH=\"$HOME/.bun/bin:$PATH\" bun run --cwd packages/shared typecheck",
+    "dev:api": "PATH=\"$HOME/.bun/bin:$PATH\" bun run --cwd apps/api dev",
+    "dev:web": "PATH=\"$HOME/.bun/bin:$PATH\" bun run --cwd apps/web dev"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

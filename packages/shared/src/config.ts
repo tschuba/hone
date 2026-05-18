@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 const storageProviderSchema = z.enum(["local", "s3"]);
+const emptyStringToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim().length === 0 ? undefined : value,
+    schema,
+  );
 
 const schema = z
   .object({
@@ -14,18 +20,20 @@ const schema = z
     AI_PROVIDER: z
       .enum(["ollama", "openai", "anthropic", "gemini"])
       .default("ollama"),
-    AI_BASE_URL: z.string().url().optional(),
+    AI_BASE_URL: emptyStringToUndefined(z.string().url().optional()),
     AI_MODEL: z.string().default("llama3.2"),
-    OIDC_ISSUER: z.string().url().optional(),
-    OIDC_CLIENT_ID: z.string().optional(),
-    OIDC_CLIENT_SECRET: z.string().optional(),
+    OIDC_ISSUER: emptyStringToUndefined(z.string().url().optional()),
+    OIDC_CLIENT_ID: emptyStringToUndefined(z.string().optional()),
+    OIDC_CLIENT_SECRET: emptyStringToUndefined(z.string().optional()),
     USE_LOCAL_AUTH_ONLY: z.coerce.boolean().default(false),
     STORAGE_PROVIDER: storageProviderSchema.default("local"),
-    S3_BUCKET: z.string().optional(),
-    S3_ENDPOINT: z.string().url().optional(),
-    S3_ACCESS_KEY: z.string().optional(),
-    S3_SECRET_KEY: z.string().optional(),
-    BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional().or(z.literal("")),
+    S3_BUCKET: emptyStringToUndefined(z.string().optional()),
+    S3_ENDPOINT: emptyStringToUndefined(z.string().url().optional()),
+    S3_ACCESS_KEY: emptyStringToUndefined(z.string().optional()),
+    S3_SECRET_KEY: emptyStringToUndefined(z.string().optional()),
+    BOOTSTRAP_ADMIN_EMAIL: emptyStringToUndefined(
+      z.string().email().optional(),
+    ),
   })
   .superRefine((value, ctx) => {
     if (!value.USE_LOCAL_AUTH_ONLY) {
