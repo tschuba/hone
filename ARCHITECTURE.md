@@ -160,58 +160,62 @@ Alles weitere (zweiter Equipment-Pool z.B. "Gym", Session-Länge) kommt ins Prof
 
 | # | Feature | Details |
 | --- | --- | --- |
+| 0 | **Übungsdatenbank-Seeding** | hone-seeder Docker Container. Quellen: wger (GPL v3 + CC-BY-SA), free-exercise-db (Public Domain), exercises.json/wrkout (Public Domain) — Attribution im Impressum Pflicht. Tagging: Tier 0 (externe Quelldaten) + Tier 1 (deterministischer Heuristik, z.B. Knieschonend). Kein LLM-Tagging im MVP (→ Phase 2). Monatlich als geplanter Job wiederholbar. |
 | 1 | **Multi-User Auth** | OIDC-first + lokaler Fallback (email + argon2). Bootstrap via .env. Instanz: offene/Invite-Registrierung konfigurierbar. |
-| 2 | **Nutzerprofil** | Ziele, Equipment-Pools, Einschränkungen, Präferenzen — jederzeit änderbar |
-| 2a | **Dynamische Ziele** | Ziele auf 3 Ebenen: Langfristig (Profil), Mesocyclus (4-Wochen-Fokus), Session (heute) |
-| 2b | **Ziel-Reaktion** | Profiländerung → Hinweis "Plan anpassen?" → sofort oder beim nächsten Zyklus |
-| 2c | **Session-Override** | Beim Training-Start: "Heute lieber..." (dezenter Link). Mehrfachauswahl: Fokus / Intensität / Typ. Nach 3 Overrides in Folge: "Plan anpassen?" |
+| 2 | **Nutzerprofil** | Ziele (Profil-Ebene), Equipment-Pools, Einschränkungen, Präferenzen — jederzeit änderbar. `goals`-Feld als `{ scope: 'profile' \| 'mesocyclus' \| 'session', value: string }[]` modellieren — MVP befüllt nur `scope: 'profile'` (verhindert API-Breaking-Change in Phase 2). |
 | 3 | **Tages-Workout** | Zeigt nächstes Workout in Rotation — kein fixer Wochentag |
-| 4 | **Equipment-Pool-Auswahl** | Beim Start: ChipGroup mit allen Pools des Nutzers (sortiert nach `pool_sort_mode`). Zuletzt verwendeter Pool vorausgewählt. Ab 4 Pools: 2 sichtbar + `[··· mehr ▾]`-Overflow. Workout passt sich an Equipment des gewählten Pools an. |
+| 4 | **Equipment-Pool-Auswahl** | Beim Start: ChipGroup mit allen Pools des Nutzers, sortiert nach `last_used_at DESC`. Zuletzt verwendeter Pool vorausgewählt. Ab 4 Pools: 2 sichtbar + `[··· mehr ▾]`-Overflow. Workout passt sich an Equipment des gewählten Pools an. Manuelle Sortierung (Drag & Drop): Phase 2. |
 | 5 | **Zeit-Auswahl** | Beim Start: [10 Min] [20 Min] [30 Min] [60 Min] |
 | 6 | **Skalierbare Workouts** | Kern (funktioniert immer) + Schichten (je nach Zeit). Aufwärmen + Abkühlen skalieren mit. |
 | 7 | **Aufwärmen & Abkühlen** | Automatisch vor/nach jedem Workout. CATEGORY=Aufwärmen/Abkühlen, passend zum Fokus. Skaliert mit Zeit. Regel-basierter Fallback wenn KI nicht verfügbar. |
-| 8 | **Übungsanleitung** | Name (DE + EN), Beschreibung, Bild (WebP), Tipps + häufige Fehler. 3 Führungs-Level: Neu (vollständig) / Bekannt (kurz) / Vertraut (nur Name + Ton) |
-| 9 | **Knieschonung** | Übungen mit MODIFIER-Tag "Knieschonend". Unsichere Übungen via Pre-Filter ausgeschlossen — KI sieht sie nicht. |
-| 10 | **Impact-Filter** | Pro User einstellbar: High-Impact ausschließen |
+| 8 | **Übungsanleitung** | Name (DE + EN), Beschreibung, Bild (WebP), Tipps + häufige Fehler. MVP: immer volle Führung (Level "Neu"). `ExerciseGuide`-Komponente mit hartem Level-Override `'neu'` bauen — Phase 2 entfernt den Override und aktiviert Level-Tracking ohne Umbau. |
+| 9 | **Knieschonung** | Übungen mit MODIFIER-Tag "Knieschonend" (Tier-1-Heuristik, kein LLM). Unsichere Übungen via Pre-Filter ausgeschlossen — KI sieht sie nicht. |
+| 10 | **Impact-Filter** | Pro User einstellbar: High-Impact ausschließen. MVP: Setting existiert, hat aber keine Wirkung (High-Impact-Tags sind Tier-2-LLM → Phase 2). |
 | 11 | **Mesocyclus-Planung** | 3-4 Wochen Plan ("dein aktueller Plan"), A/B/C Rotation, dann neuer Plan |
-| 12 | **AI-Plangeneration** | Konfigurierbarer Provider (.env). Async via LISTEN/NOTIFY + 5-Min-Fallback-Poll. Regel-basierter Fallback wenn KI nicht verfügbar. AI-Prompts versioniert in DB. Rate-Limits konfigurierbar (Admin), alle deaktivierbar. |
-| 13 | **AI Rate-Limiting** | Max. 1 Job gleichzeitig (DB-seitig). Max. Tages-Pläne: konfigurierbar (Default 5). Cooldown: konfigurierbar (Default 60 Min). Feedback-Regenerierung: 1 pro Tag (zählt nicht gegen Tages-Limit). Globales Server-Limit: 20 Jobs/Tag (alle User kombiniert, konfigurierbar). |
+| 12 | **AI-Plangeneration** | Konfigurierbarer Provider (.env). Async via LISTEN/NOTIFY + 5-Min-Fallback-Poll. Regel-basierter Fallback wenn KI nicht verfügbar. AI-Prompts versioniert in DB. |
+| 13 | **AI Rate-Limiting** | Max. 1 Job gleichzeitig (DB-seitig via `FOR UPDATE SKIP LOCKED`). Per-User-Tageslimit (Default 5) + Cooldown (Default 60 Min) sind aktiv — kein Konfigurations-UI im MVP. Feedback-Regenerierung: 1 pro Tag (zählt nicht gegen Tages-Limit). Konfigurations-UI + globales Server-Limit: Phase 2 (#41 Admin-Panel). |
 | 14 | **Plan-Anpassung** | Einzelne Übungen tauschen (gefilterte Alternativen). Plan neu generieren (Rate-Limit). Manuelles Workout aus DB bauen. |
 | 15 | **Mesocyclus-Feedback** | Nach jeder Woche: Mehrfachauswahl ("zu leicht / genau richtig / zu schwer / abwechslungsreich / monoton") + optionaler Freitext. Kontext für nächste Plangeneration. |
 | 16 | **Aussetzen** | "Heute nicht" — Rotation setzt beim nächsten Training fort |
-| 17 | **Motivations-Badge** | In-App Hinweis bei langem Aussetzen — nur in Post-Workout-Summary oder Weekly-Summary, nie im aktiven Training |
-| 18 | **Pausen zwischen Übungen** | Pause-Screen nach jeder Übung: Countdown, Vorschau nächste Übung, [Überspringen]. TTS: "Pause — 15 Sekunden. Nächste Übung: X." Hierarchie: WorkoutTemplateExercise.rest_seconds → exercise.suggested_rest_seconds → Profil-Default (Default 15 Sek). |
-| 19 | **Trainings-Logging** | Sätze (Set-Tabelle), Dauer, optionale Reps pro Übung |
-| 19 | **Fortschritts-Tracking** | Trainings-Streak, Volumen über Zeit, Aktivitäts-Kalender |
-| 20 | **Körperdaten** | Gewicht + Bauchumfang manuell eintragen, Verlauf als Chart |
-| 21 | **Offline-Training** | vite-plugin-pwa + Workbox. Cache-First: App-Shell, Bilder. Network-First+Fallback: aktives Workout, Profil. iOS Safari 14+ (Wake Lock ab 16.4 via Feature-Detection). Workout-Daten vollständig in IndexedDB cachen beim Training-Start-Tap. |
-| 22 | **Offline-Sync** | UUID-basierte Idempotenz. Pending-Operations-Queue in IndexedDB (Dexie.js). Sync beim App-Öffnen (Queue-basiert, nicht Full-Refresh). Letzter Sync-Zeitstempel sichtbar. Konflikt: Server gewinnt auf Session-Level, Toast-Benachrichtigung (nie während aktivem Training). |
-| 23 | **Hands-Free Modus** | Web Audio API (Töne, unterbricht keine Musik). Web Speech API (TTS, best-effort, Deutsch). Vibration API (Feature-Detection — kein iOS). Auto-Advance. Countdown-Töne (10s / 5s / 3-2-1 / Ende). Audio-Context-Unlock beim Training-Start-Tap (iOS-Anforderung). |
-| 24 | **Screen Wake Lock** | Feature-Detection. iOS 16.4+: automatisch. iOS 14/15: einmaliger UI-Hinweis "Display anlassen". |
-| 25 | **Audio-Einstellungen** | Unabhängige Toggles: Sprachansagen (TTS) / Töne+Beeps / Vibration / Auto-Advance. Kombinierbar. Presets als Schnellauswahl. Mid-Workout wechselbar via Overlay — Timer läuft weiter. |
-| 26 | **Hands-Free Navigation** | Auto-Advance AN: Dot-Indikator (rein informativ, ARIA: role="status"), vertikale Swipe-Gesten. Auto-Advance AUS: Fortschrittsbalken, 3-Punkt-Menü. |
-| 27 | **Adaptive Übungsführung** | Führungs-Level: Neu (Bild groß + vollständige Beschreibung + Tipps) / Bekannt (Bild klein + Kurztext) / Vertraut (nur Name + Ton). Re-Familiarisierung nach >3-4 Wochen Pause. |
-| 28 | **Zeitbasierte Übungen** | Standard: zeitbasiert (hands-free-freundlich, ideal für Isometrie). Reps als Orientierungsrahmen. |
-| 29 | **Timer-Display** | `clamp(5rem, 20vw, 6rem)`. Geist Mono (Monospaced — verhindert Layout-Zittern). Aktiv: Amber. Pause: 50% Opacity + Pause-Icon. Fertig: kurzes Grün-Flash → Auto-Advance oder [Fertig ✓]. |
-| 30 | **Datenexport & GDPR** | Vollexport JSON/CSV jederzeit. Account-Löschung: alle User-Daten weg. Zu Global beförderte Übungen: bleiben, Attribution anonymisiert ("Instanz-Übung"). |
-| 31 | **Data Retention** | Trainings-Logs dauerhaft. Admin kann instanz-weite Policy konfigurieren. Nutzer kann einzelne Trainings oder Zeiträume löschen. |
+| 17 | **Pausen zwischen Übungen** | Pause-Screen nach jeder Übung: Countdown, Vorschau nächste Übung, [Überspringen]. Hierarchie: WorkoutTemplateExercise.rest_seconds → exercise.suggested_rest_seconds → Profil-Default (Default 15 Sek). TTS-Ansage: Phase 2 (Hands-Free). |
+| 18 | **Trainings-Logging** | Sätze (Set-Tabelle), Dauer, optionale Reps pro Übung |
+| 19 | **Screen Wake Lock** | Feature-Detection. iOS 16.4+: automatisch. iOS 14/15: einmaliger UI-Hinweis "Display anlassen". |
+| 20 | **Offline-Training & Sync** | vite-plugin-pwa + Workbox. Cache-First: App-Shell, Bilder. Network-First+Fallback: aktives Workout, Profil. Workout-Daten vollständig in IndexedDB cachen beim Training-Start-Tap. Queue als Transport-Buffer (aggressiver Flush nach jedem Set, Dexie.js). UUID-basierte Idempotenz (verhindert Duplikate bei Retry). Sync beim App-Öffnen. Erweiterter Konfliktresolution + Last-Sync-Timestamp im UI: Phase 2. |
+| 21 | **Zeitbasierte Übungen** | Standard: zeitbasiert (ideal für Isometrie). Reps als Orientierungsrahmen. |
+| 22 | **Timer-Display** | `clamp(5rem, 20vw, 6rem)`. Geist Mono (Monospaced — verhindert Layout-Zittern). Aktiv: Amber. Pause: 50% Opacity + Pause-Icon. Fertig: kurzes Grün-Flash → [Fertig ✓]. |
+| 23 | **GDPR-Minimalexport** | `GET /api/v1/users/me/export` — JSON-Dump aller eigenen Daten. Account-Löschung via Admin-CLI (`bun run cli delete-user --email <email>`, kaskadierendes Delete aller user_id-Tabellen). Self-Service-UI (Export-Button, Konto-Löschung im Profil): Phase 2. |
+| 24 | **Device-Services-Abstraktionsschicht** | Interface für Wake Lock, Vibration, TTS vollständig definiert. MVP implementiert nur Wake Lock. Vibration + TTS als No-Op-Implementierungen — Phase 2 tauscht sie aus ohne Umbau der Aufrufer. |
 
 ### Phase 2 — Should Have
 
 | # | Feature | Details |
 | --- | --- | --- |
-| 32 | **Apple Health (Shortcuts)** | Nach Training: ein Tap → iOS Shortcut → schreibt Typ/Dauer/kcal zu Apple Health. |
-| 33 | **Ernährungsplan** | AI-generiert, Kalorienziel, Makros, Vorlieben/Abneigungen |
-| 34 | **Admin-Panel** | Nutzerverwaltung, Instanz-Einstellungen, Registrierung an/aus, Papierkorb-Ansicht für gelöschte Übungen |
-| 35 | **Light Mode** | System-Theming (Dark/Light). MVP: nur Dark. Nachrüstbar wenn CSS Tokens von Anfang an sauber. |
-| 36 | **RAG für AI-Plangeneration** | pgvector bereits aktiviert. Semantische Suche über Trainingshistorie und Feedback für bessere Langzeit-Personalisierung. |
+| 25 | **Fortschritts-Tracking** | Trainings-Streak, Volumen über Zeit, Aktivitäts-Kalender |
+| 26 | **Körperdaten** | Gewicht + Bauchumfang manuell eintragen, Verlauf als Chart |
+| 27 | **Motivations-Badge** | In-App Hinweis bei langem Aussetzen — nur in Post-Workout-Summary oder Weekly-Summary, nie im aktiven Training |
+| 28 | **Hands-Free Modus** | Web Audio API (Töne, unterbricht keine Musik). Web Speech API (TTS, best-effort, Deutsch). Vibration API (Feature-Detection — kein iOS). Auto-Advance. Countdown-Töne (10s / 5s / 3-2-1 / Ende). Audio-Context-Unlock beim Training-Start-Tap (iOS-Anforderung). |
+| 29 | **Audio-Einstellungen** | Unabhängige Toggles: Sprachansagen (TTS) / Töne+Beeps / Vibration / Auto-Advance. Kombinierbar. Presets als Schnellauswahl. Mid-Workout wechselbar via Overlay — Timer läuft weiter. |
+| 30 | **Hands-Free Navigation** | Auto-Advance AN: Dot-Indikator (rein informativ, ARIA: role="status"), vertikale Swipe-Gesten. Auto-Advance AUS: Fortschrittsbalken, 3-Punkt-Menü. |
+| 31 | **Adaptive Übungsführung** | Führungs-Level: Neu (Bild groß + vollständige Beschreibung + Tipps) / Bekannt (Bild klein + Kurztext) / Vertraut (nur Name + Ton). Re-Familiarisierung nach >3-4 Wochen Pause. Level-Override `'neu'` aus `ExerciseGuide` entfernen und Level-Tracking aktivieren. |
+| 32 | **Dynamische Ziele (3 Ebenen)** | Ziele auf 3 Ebenen: Langfristig (Profil), Mesocyclus (4-Wochen-Fokus), Session (heute). `goals`-Array-Scopes `'mesocyclus'` + `'session'` befüllen. |
+| 33 | **Ziel-Reaktion** | Profiländerung → Hinweis "Plan anpassen?" → sofort oder beim nächsten Zyklus |
+| 34 | **Session-Override** | Beim Training-Start: "Heute lieber..." (dezenter Link). Mehrfachauswahl: Fokus / Intensität / Typ. Nach 3 Overrides in Folge: "Plan anpassen?" |
+| 35 | **Erweiterte Offline-Sync** | Konfliktresolution (Server gewinnt auf Session-Level, Toast-Benachrichtigung). Letzter Sync-Zeitstempel sichtbar im UI. |
+| 36 | **Seeder Tier 2 (LLM-Tagging)** | LLM-Ensemble (Ollama) für Rückenschonend, Schulterschonend, Low-Impact, High-Impact. Aktiviert Impact-Filter (#10) vollständig. |
+| 37 | **GDPR Self-Service** | Export-Button im Profil (JSON/CSV). Konto-Löschung selbst auslösbar. Attribution gelöschter Übungen anonymisieren. |
+| 38 | **Data Retention** | Trainings-Logs dauerhaft. Admin kann instanz-weite Policy konfigurieren. Nutzer kann einzelne Trainings oder Zeiträume löschen. |
+| 39 | **Apple Health (Shortcuts)** | Nach Training: ein Tap → iOS Shortcut → schreibt Typ/Dauer/kcal zu Apple Health. |
+| 40 | **Ernährungsplan** | AI-generiert, Kalorienziel, Makros, Vorlieben/Abneigungen |
+| 41 | **Admin-Panel** | Nutzerverwaltung, Instanz-Einstellungen, Registrierung an/aus, AI Rate-Limit-Konfiguration, Papierkorb-Ansicht für gelöschte Übungen |
+| 42 | **Light Mode** | System-Theming (Dark/Light). Nachrüstbar wenn CSS Tokens von Anfang an sauber. |
+| 43 | **RAG für AI-Plangeneration** | pgvector bereits aktiviert. Semantische Suche über Trainingshistorie und Feedback für bessere Langzeit-Personalisierung. |
 
 ### Phase 3 — Optional
 
 | # | Feature | Details |
 | --- | --- | --- |
-| 37 | **Capacitor-Wrapper (iOS)** | Nativer HealthKit-Zugriff. Benötigt Apple Developer Account (99€/Jahr). |
-| 38 | **A/B-Testing AI-Pläne** | Für größere Nutzerbasis. Daten bereits in `ai_generation_logs`. |
+| 44 | **Capacitor-Wrapper (iOS)** | Nativer HealthKit-Zugriff. Benötigt Apple Developer Account (99€/Jahr). |
+| 45 | **A/B-Testing AI-Pläne** | Für größere Nutzerbasis. Daten bereits in `ai_generation_logs`. |
 
 ### Explizit NICHT im Scope (MVP)
 
@@ -457,20 +461,17 @@ Ein **Equipment Pool** ist eine benannte Sammlung von Equipment-Tags. Er hat kei
 
 ### Sortierung
 
-| `pool_sort_mode` | Reihenfolge |
-| --- | --- |
-| `auto` (Default) | `ORDER BY last_used_at DESC NULLS LAST` |
-| `manual` | `ORDER BY sort_order ASC` |
+MVP: Immer `ORDER BY last_used_at DESC NULLS LAST`. Kein `pool_sort_mode`-Toggle, kein `sort_order`-Feld im MVP.
 
-Beim ersten Drag & Drop in der Pool-Verwaltung: Wechsel auf `manual`, alle Pools erhalten `sort_order`-Werte basierend auf der aktuellen Auto-Reihenfolge. "Zurück zur automatischen Sortierung" setzt `pool_sort_mode` zurück auf `auto`.
+**Phase 2:** Manueller Sort-Modus + Drag & Drop. Beim ersten Drag & Drop wechselt die Instanz auf `manual`, alle Pools erhalten `sort_order`-Werte. "Zurück zur automatischen Sortierung" setzt zurück auf `auto`.
 
 ### Pool-Verwaltung (Profil/Einstellungen)
 
-- Liste aller Pools, per Drag & Drop sortierbar
+- Liste aller Pools, sortiert nach `last_used_at DESC`
 - Tippen → Name editieren + Equipment-Auswahl (MultiSelect)
 - `[+ Neues Set]`-Button
 - Löschen per Swipe/Kontextmenü (gesperrt beim letzten Pool)
-- "Automatisch sortieren"-Toggle
+- Drag & Drop + "Automatisch sortieren"-Toggle: Phase 2
 
 ### Auswirkung auf Plan-Generierung
 
@@ -955,6 +956,11 @@ Alle Daten (Template + Exercises + Tags + Bilder-URLs) in einem Datenbankaufruf 
 
 **Konfliktauflösung:** Sets sind nach Sync **unveränderlich**. Sync-Modell: **idempotenter Append per UUID** — Server akzeptiert ersten Write, ignoriert Duplikate mit bekannter UUID. Kein "Server gewinnt"-Szenario, da der Server bei laufenden Trainings typischerweise noch keine Daten hat. Zwei-Geräte-Gleichzeitigkeit: dokumentiertes v1-Limit, kein Handling nötig.
 
+**Phase-Abgrenzung:**
+
+- **MVP:** Queue als Transport-Buffer + UUID-Idempotenz. Kein Last-Sync-Timestamp im UI.
+- **Phase 2 (#35):** Erweiterter Konfliktresolution für Mehrgerate-Szenarien. Last-Sync-Zeitstempel sichtbar im UI. Toast-Benachrichtigung bei Konflikten (nie während aktivem Training).
+
 **iOS-Besonderheiten:**
 
 - `visibilitychange` + `pageshow`-Event: Timer-Delta neu berechnen nach Hintergrund / BFCache-Restore. `pageshow` (mit `event.persisted`) fängt BFCache-Rückkehr ab, die kein `visibilitychange` auslöst.
@@ -1219,19 +1225,19 @@ bun run cli tag-batch --type=X --confidence-threshold=0.9 # Custom Threshold
 | Authorization | Prisma Middleware + Defense-in-Depth (user_id NOT NULL, Integration-Tests) |
 | Raw Queries | CI-Grep-Check: `grep -rn '\$queryRaw\|\$executeRaw' src/ --include='*.ts' && exit 1`. Biome hat keine Custom-Rule-API. Legitime Ausnahmen per `// SECURITY-REVIEW-APPROVED` whitelisten. Allowlist-Test für Middleware-Registrierung. |
 | JWT-Rollen | Fehlender Claim → Default: User. OIDC_ROLE_CLAIM, OIDC_ADMIN_VALUE per .env konfigurierbar. |
-| Session | Serverseitige Session-Tabelle. Sofortige Invalidierung. Kein Token-Ablauf mid-workout. |
+| Session | Serverseitige Session-Tabelle. Sofortige Invalidierung. Kein Token-Ablauf mid-workout. Manuelle Session-Invalidierung via CLI (kein Admin-Panel im MVP): `DELETE FROM sessions WHERE user_id = '<id>'`. |
 | Admin-Bootstrap | BOOTSTRAP_ADMIN_EMAIL in .env. Notfall: `bun run cli promote-admin` |
 | CSRF | SameSite=Strict Cookie + Double-Submit-Cookie (X-CSRF-Token Header) + Origin-Header-Prüfung. Token-Ausgabe: `GET /api/v1/auth/csrf` → Token im Response-Body + HttpOnly-Cookie. SPA holt Token beim App-Start; zentraler `fetch()`-Wrapper in `src/lib/api.ts` setzt `X-CSRF-Token`-Header automatisch bei POST/PUT/PATCH/DELETE. Token-Rotation bei jedem Login. |
 | Session-Expiry | max_age: 8h User / 1h Admin. Cleanup-Job alle 15 Min (`DELETE WHERE expires_at < NOW() LIMIT 1000` — verhindert Lock-Eskalation bei Nachholbedarf). |
 | Session-Indizes | `@@index([userId, expiresAt])`, `@@index([expiresAt])` |
 | Backchannel-Logout | `/api/v1/auth/backchannel-logout` — Authentik-Initiated Session-Termination. Validierung: (1) JWKS-URI beim App-Start fetchen + cachen. Cache-TTL: `JWKS_CACHE_TTL_SECONDS` (Default: 3600 = 1h, via `.env` konfigurierbar — Self-Hosted kann erhöhen). (2) `logout_token` via JWKS signaturprüfen (RS256/ES256). (3) Claims validieren: `iss`, `aud`, `iat` (max. 5 Min alt), `jti` (Deduplizierung via `used_logout_tokens`-Tabelle — persistent über Restarts, Cleanup alle 15 Min: `DELETE WHERE used_at < NOW() - INTERVAL '10 minutes'`). (4) Token mit `nonce`-Claim sofort ablehnen. (5) Bei Erfolg: Session löschen. |
-| Passwort-Hashing | argon2 (`memoryCost: 19456`, `timeCost: 3`, `parallelism: 2`). 19MB statt OWASP-empfohlener 64MB — bewusster Trade-off für ressourcenbeschränkte Systeme. `parallelism: 2` statt 4 — verhindert CPU-Bottleneck bei parallelen Logins. Betrifft nur den lokalen Auth-Fallback — OIDC-Nutzer berühren argon2 nicht. Konfigurierbar: `ARGON2_MEMORY_COST`, `ARGON2_PARALLELISM`. Admin-UI zeigt Hinweis wenn unter OWASP-Empfehlung (65536 / parallelism 4). |
+| Passwort-Hashing | argon2 (`memoryCost: 19456`, `timeCost: 3`, `parallelism: 2`). 19MB statt OWASP-empfohlener 64MB — bewusster Trade-off für ressourcenbeschränkte Systeme. `parallelism: 2` statt 4 — verhindert CPU-Bottleneck bei parallelen Logins. Betrifft nur den lokalen Auth-Fallback — OIDC-Nutzer berühren argon2 nicht. Konfigurierbar: `ARGON2_MEMORY_COST`, `ARGON2_PARALLELISM`. `.env.example` enthält Kommentar mit OWASP-Empfehlung und Pi-Trade-off-Erklärung. Admin-UI zeigt Hinweis wenn unter OWASP-Empfehlung (65536 / parallelism 4). |
 | Rate-Limiting | In-Memory Sliding-Window (Token-Bucket). Response-Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`. Reset bei Neustart akzeptiert (Single-Instance). |
 | Prompt-Injection | Alle User-Freitext-Inputs werden serverseitig per `text.normalize('NFKC')` normalisiert (Homoglyph-Schutz) bevor Zeichenlimit und Steuer-Token-Erkennung greifen. JSON-Quoting + 1.000-Zeichen-Limit + Steuer-Token-Erkennung via `safety_keywords`-Tabelle (DB, mehrsprachig, inkl. deutsche Keywords: "ignoriere", "vergiss alle", "neues system") → Generation abbrechen + Admin-Alert. Keyword-Blocking ist Frühwarnschicht, kein vollständiger Schutz — echter Schutz liegt im ID-Whitelist-System. Gilt auch für Seed-Dateien. |
 | Safety-Keywords | DB-Tabelle, admin-verwaltbar, mehrsprachig (DE + EN). Keyword-Match → maximale MODIFIER-Filter + UI-Hinweis. |
 | Medizinischer Disclaimer | Screen 4 (Einschränkungen) + expliziter Hinweis vor Plan-Generierung |
 | API Rate-Limiting | 100 Requests/Min/User, In-Memory Sliding-Window, konfigurierbar via .env |
-| GDPR | `DELETE /api/v1/users/me` — synchron, Bestätigungs-Token erforderlich, Soft-Delete mit 30-Tage-Fenster vor Hard-Delete. Datenschutzerklärung mit Backup-Retention transparent. |
+| GDPR | MVP: `GET /api/v1/users/me/export` — JSON-Dump aller eigenen Daten. Account-Löschung via Admin-CLI (`bun run cli delete-user --email <email>`), kaskadierendes Delete aller user_id-Tabellen (Sessions, ai_jobs, mesocyclus, workout_sessions, sets, pools). Self-Service-UI + `DELETE /api/v1/users/me`: Phase 2 (#37). Datenschutzerklärung mit Backup-Retention transparent. |
 | Bootstrap-Admin | Nach `bootstrap_claimed = true`: Admin-Panel-Banner "Bootstrap bestätigt — entferne `BOOTSTRAP_ADMIN_EMAIL` aus `.env`". |
 | Error-Logs | `ai_generation_logs.last_error`: klassifizierte Fehlercodes (kein roher Stack-Trace) — verhindert Information-Disclosure im `/debug`-Screen. |
 | HTTP-Security-Headers | CSP: `default-src 'self'; object-src 'none'; base-uri 'self'`. Permissions-Policy: `microphone=(), camera=(), geolocation=()`. Konfiguration via Traefik-Labels in `docker-compose.yml` auf Frontend-Container. |
@@ -1246,7 +1252,7 @@ bun run cli tag-batch --type=X --confidence-threshold=0.9 # Custom Threshold
 
 - Strukturiertes JSON-Logging (level, timestamp, context, message)
 
-**`GET /health`** — öffentlich, kein Auth:
+**`GET /health`** — kein Auth, aber **nicht öffentlich exponieren** (Traefik: nur internes Netz oder IP-Allowlist). Leakt bei unkonfiguriertem System den Bootstrap-Status.
 
 ```json
 { "status": "ok | degraded | down" }
@@ -1557,7 +1563,7 @@ Vollständige ADRs in `/docs/adr/` (12 ADRs vor Implementierungsbeginn). Kurzüb
 | 006 | Frontend Framework | **Svelte 5 (Runes)** | Greenfield-Projekt, moderne State-Patterns, kein Migration-Overhead |
 | 007 | AI-Prompts Storage | **Versioniert in DB** | Admin-konfigurierbar, Rollback jederzeit, mehrsprachig |
 | 008 | Safety-Keywords Storage | **In DB, admin-verwaltbar** | Mehrsprachigkeit, Instanz-Anpassbarkeit |
-| 009 | Device-Service-Abstraktionsschicht | **Hinter Service-Interface** | Capacitor-ready für Phase 3, testbar via Mocks |
+| 009 | Device-Service-Abstraktionsschicht | **Hinter Service-Interface, No-Op-First** | Interface für Wake Lock, Vibration und TTS vollständig definiert. MVP implementiert nur Wake Lock; Vibration + TTS als No-Ops (Feature #24). Phase 2 tauscht Implementierungen ohne Umbau der Aufrufer. Phase 3: Capacitor-Implementierungen. Testbar via Mocks. |
 | 010 | Transaktionsgrenzen-Strategie | **Optionaler `tx`-Parameter im Repository** | Service besitzt `$transaction()`. Repos bleiben unabhängig nutzbar. Atomare Multi-Repo-Ops ohne Kopplung. |
 | 011 | Session-Verlängerung beim Training | **Aktive Verlängerung via `workout_session_started_at`** | Alternativen: kein Timeout (Sicherheitsrisiko) oder Mid-Training-Abbruch durch Ablauf (UX-Katastrophe). Gewählter Trade-off: definierter Zeitrahmen mit hartem Cap (4h) — bewusst akzeptiert. |
 | 012 | argon2-Parameter für ressourcenbeschränkte Systeme | **`memoryCost: 19456`, `parallelism: 2`** | OWASP empfiehlt 64MB/4-thread — auf Pi mit 256MB-Limit nicht vertretbar. 19MB + 2 Threads verhindert OOM bei parallelen Logins. Nur lokaler Auth-Fallback betroffen (OIDC-Nutzer: kein argon2). Admin-UI warnt wenn unter Empfehlung. |
