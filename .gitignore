@@ -2,9 +2,14 @@ node_modules/
 .env
 .env.local
 .env.*.local
+bun.lock
+bun.lockb
 dist/
 build/
 .svelte-kit/
+.vercel/
+.coverage/
+coverage/
 prisma/dev.db
 prisma/dev.db-journal
 *.log

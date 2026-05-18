@@ -31,7 +31,21 @@
 
 Before Sprint 0:
 - Docker Desktop (or Colima on Mac) running
-- Bun ≥ 1.1 installed (`curl -fsSL https://bun.sh/install | bash`)
+- Bun ≥ 1.1 installed
+  Installation on macOS/Linux:
+  ```bash
+  curl -fsSL https://bun.sh/install | bash
+  exec /bin/zsh
+  bun --version
+  ```
+  If `bun` is still not found after installation, add the Bun binary directory to your shell and restart the terminal:
+  ```bash
+  export PATH="$HOME/.bun/bin:$PATH"
+  echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.zshrc
+  exec /bin/zsh
+  bun --version
+  ```
+  Hone uses Bun as the primary package manager and task runner (`bun install`, `bun run`, `bunx prisma ...`).
 - Node.js ≥ 20 (for tooling that doesn't support Bun yet)
 - Git, GitHub CLI (`gh`)
 - VS Code with Svelte and Prisma extensions

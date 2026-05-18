@@ -1,0 +1,53 @@
+services:
+  db:
+    image: ankane/pgvector:latest
+    container_name: hone-db
+    environment:
+      POSTGRES_DB: hone
+      POSTGRES_USER: hone
+      POSTGRES_PASSWORD: hone
+    ports:
+      - '5432:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hone -d hone']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hone-dev
+
+  storage:
+    image: minio/minio
+    container_name: hone-minio
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: hone
+      MINIO_ROOT_PASSWORD: hone-storage-secret
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+    networks:
+      - hone-dev
+
+  ollama:
+    image: ollama/ollama
+    container_name: hone-ollama
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - hone-dev
+
+volumes:
+  db-data:
+  minio-data:
+  ollama-data:
+
+networks:
+  hone-dev:
+    driver: bridge

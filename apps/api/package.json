@@ -1,0 +1,25 @@
+{
+  "name": "@hone/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@hone/shared": "file:../../packages/shared",
+    "@prisma/adapter-pg": "^6.8.2",
+    "@prisma/client": "^6.8.2",
+    "hono": "^4.7.10",
+    "pg": "^8.16.0",
+    "zod": "^3.25.7"
+  },
+  "devDependencies": {
+    "prisma": "^6.8.2",
+    "typescript": "^5.8.3"
+  }
+}
