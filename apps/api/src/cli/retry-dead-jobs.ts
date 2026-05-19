@@ -21,7 +21,12 @@ async function main() {
   if (dryRun) {
     for (const job of deadJobs) {
       console.log(
-        [job.id, job.userId, job.createdAt.toISOString(), job.lastError ?? ""].join("\t"),
+        [
+          job.id,
+          job.userId,
+          job.createdAt.toISOString(),
+          job.lastError ?? "",
+        ].join("\t"),
       );
     }
 

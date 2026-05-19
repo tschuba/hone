@@ -23,6 +23,85 @@ type EquipmentPool = {
   tags: string[];
 };
 
+type ActiveWorkoutExercise = {
+  completedSets: number;
+  durationSecs: number | null;
+  exerciseId: string;
+  exerciseLogId: string | null;
+  imageAltText: string;
+  imageUrl: string | null;
+  name: string;
+  position: number;
+  reps: number | null;
+  restSecs: number;
+  sets: number;
+  substitutedForExerciseId: string | null;
+  substitutedForName: string | null;
+};
+
+type ActiveWorkout =
+  | { status: "empty" }
+  | {
+      exercises: ActiveWorkoutExercise[];
+      mesocyclusId: string | null;
+      sessionId: string;
+      status: "active_session";
+      templateId: string;
+      templateLabel: string;
+      templateTitle: string | null;
+    }
+  | {
+      exercises: ActiveWorkoutExercise[];
+      mesocyclusId: string;
+      sessionId: null;
+      status: "planned";
+      templateId: string;
+      templateLabel: string;
+      templateTitle: string | null;
+    };
+
+type StartedWorkoutSession = {
+  exerciseLogs: Array<{
+    exerciseId: string;
+    id: string;
+    position: number;
+  }>;
+  id: string;
+  status: string;
+  templateId: string | null;
+};
+
+type WorkoutHistoryItem = {
+  completedAt: string | null;
+  id: string;
+  startedAt: string;
+  status: string;
+  templateId: string | null;
+};
+
+type CreatePlanResponse = {
+  jobId: string;
+  mesocyclusId: string;
+  planSource: "rule_based";
+  status: "queued";
+};
+
+type SetPayload = {
+  durationSecs?: number;
+  exerciseLogId: string;
+  reps?: number;
+  setNr: number;
+  uuid: string;
+};
+
+type ExerciseSubstitutionCandidate = {
+  id: string;
+  imageAltText: string;
+  imageUrl: string | null;
+  name: string;
+  tags: string[];
+};
+
 type ProfileConstraints = {
   impactFilter: boolean;
 };
@@ -117,15 +196,44 @@ export const api = {
       method: "POST",
     });
   },
+  completeWorkoutSession(sessionId: string) {
+    return request<{ completedAt: string; id: string; status: string }>(
+      `/workout-sessions/${sessionId}/complete`,
+      {
+        method: "POST",
+      },
+    );
+  },
+  createPlan(input?: {
+    equipmentPoolId?: string;
+    sessionMinutes?: number;
+    weeksCount?: number;
+  }) {
+    return request<CreatePlanResponse>("/plans", {
+      body: input ?? {},
+      method: "POST",
+    });
+  },
   getCurrentUser() {
     return request<AuthUser>("/auth/me");
+  },
+  getActiveWorkout() {
+    return request<ActiveWorkout>("/workout/today");
   },
   getProfile() {
     return request<UserProfile>("/users/me");
   },
   initCsrf,
+  listExerciseSubstitutions(sessionId: string, exerciseLogId: string) {
+    return request<{ items: ExerciseSubstitutionCandidate[] }>(
+      `/workout-sessions/${sessionId}/exercises/${exerciseLogId}/substitutions`,
+    );
+  },
   listEquipmentPools() {
     return request<{ items: EquipmentPool[] }>("/equipment-pools");
+  },
+  listWorkoutHistory() {
+    return request<{ items: WorkoutHistoryItem[] }>("/workout-sessions");
   },
   login(email: string, password: string) {
     return request<{ ok: true }>("/auth/login", {
@@ -138,6 +246,19 @@ export const api = {
       method: "POST",
     });
   },
+  logSet(sessionId: string, set: SetPayload) {
+    return request<{
+      durationSecs: number | null;
+      exerciseLogId: string;
+      id: string;
+      reps: number | null;
+      setNr: number;
+      uuid: string;
+    }>(`/workout-sessions/${sessionId}/sets`, {
+      body: set,
+      method: "POST",
+    });
+  },
   register(email: string, password: string) {
     return request<{ email: string; id: string }>("/auth/register", {
       body: { email, password },
@@ -145,6 +266,46 @@ export const api = {
     });
   },
   request,
+  skipToday(mesocyclusId: string) {
+    return request<{ id: string; status: string }>("/workout-sessions/skip", {
+      body: { mesocyclusId },
+      method: "POST",
+    });
+  },
+  startSession(templateId: string) {
+    return request<StartedWorkoutSession>("/workout-sessions", {
+      body: { templateId },
+      method: "POST",
+    });
+  },
+  substituteExercise(
+    sessionId: string,
+    exerciseLogId: string,
+    exerciseId: string,
+  ) {
+    return request<{
+      exerciseId: string;
+      exerciseLogId: string;
+      imageAltText: string;
+      imageUrl: string | null;
+      name: string;
+      substitutedForExerciseId: string | null;
+      substitutedForName: string | null;
+    }>(`/workout-sessions/${sessionId}/exercises/${exerciseLogId}/substitute`, {
+      body: { exerciseId },
+      method: "POST",
+    });
+  },
+  submitFeedback(input: {
+    difficulty: string;
+    mesocyclusId: string;
+    variety: string;
+  }) {
+    return request<{ jobId: string; ok: true }>("/feedback", {
+      body: input,
+      method: "POST",
+    });
+  },
   updateEquipmentPool(
     poolId: string,
     input: { name?: string; tags?: string[] },
@@ -162,4 +323,16 @@ export const api = {
   },
 };
 
-export type { EquipmentPool, ProfileConstraints, ProfileGoal, UserProfile };
+export type {
+  ActiveWorkout,
+  ActiveWorkoutExercise,
+  CreatePlanResponse,
+  ExerciseSubstitutionCandidate,
+  EquipmentPool,
+  ProfileConstraints,
+  ProfileGoal,
+  SetPayload,
+  StartedWorkoutSession,
+  UserProfile,
+  WorkoutHistoryItem,
+};

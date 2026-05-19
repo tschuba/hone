@@ -2,11 +2,11 @@ import type { Prisma } from "@prisma/client";
 import pg from "pg";
 
 import { prisma } from "../db/client";
-import { detectInjection } from "../services/injection-detector.service";
 import {
   type AiProvider,
   UnconfiguredAiProvider,
 } from "../services/ai-provider";
+import { detectInjection } from "../services/injection-detector.service";
 
 type AiJobRecord = {
   attemptCount: number;
@@ -135,15 +135,15 @@ const defaultStore: AiJobStore = {
     await prisma.$executeRaw`
       UPDATE ai_jobs
       SET status = CASE
-        WHEN attempt_count + 1 >= max_attempts THEN 'DEAD'
-        ELSE 'PENDING'
+        WHEN attempt_count + 1 >= max_attempts THEN 'DEAD'::"AiJobStatus"
+        ELSE 'PENDING'::"AiJobStatus"
       END,
       attempt_count = attempt_count + 1,
       last_error = 'worker_crash',
       locked_until = NULL,
       heartbeat_at = NULL,
       worker_id = NULL
-      WHERE status = 'PROCESSING'
+      WHERE status = 'PROCESSING'::"AiJobStatus"
       AND locked_until < NOW()
       AND deleted_at IS NULL
     `;
@@ -152,14 +152,14 @@ const defaultStore: AiJobStore = {
   async claimNextJob({ lockUntil, now, workerId }) {
     const [job] = await prisma.$queryRaw<AiJobRecord[]>`
       UPDATE ai_jobs
-      SET status = 'PROCESSING',
+      SET status = 'PROCESSING'::"AiJobStatus",
           worker_id = ${workerId},
           locked_until = ${lockUntil},
           heartbeat_at = ${now}
       WHERE id = (
         SELECT id
         FROM ai_jobs
-        WHERE status = 'PENDING'
+        WHERE status = 'PENDING'::"AiJobStatus"
           AND deleted_at IS NULL
         ORDER BY priority DESC, created_at ASC
         LIMIT 1

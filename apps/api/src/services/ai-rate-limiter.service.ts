@@ -14,6 +14,7 @@ type AiJobStore = {
   createJob(input: {
     input?: Prisma.InputJsonValue;
     priority?: "FEEDBACK" | "NORMAL";
+    type?: "FEEDBACK" | "MESOCYCLUS";
     userId: string;
   }): Promise<AiJobSummary>;
   findActiveJob(userId: string): Promise<AiJobSummary | null>;
@@ -33,11 +34,12 @@ const defaultStore: AiJobStore = {
     });
   },
 
-  async createJob({ input, priority, userId }) {
+  async createJob({ input, priority, type, userId }) {
     return db.aiJob.create({
       data: {
         ...(input !== undefined ? { input } : {}),
         ...(priority ? { priority } : {}),
+        ...(type ? { type } : {}),
         userId,
       },
       select: {
@@ -93,6 +95,7 @@ export class AiRateLimiter {
     userId: string,
     input?: Prisma.InputJsonValue,
     priority?: "FEEDBACK" | "NORMAL",
+    type?: "FEEDBACK" | "MESOCYCLUS",
   ) {
     const now = this.now();
     const sixtyMinsAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -117,6 +120,6 @@ export class AiRateLimiter {
       throw new Error("Daily limit reached (5 plans/day)");
     }
 
-    return this.store.createJob({ input, priority, userId });
+    return this.store.createJob({ input, priority, type, userId });
   }
 }

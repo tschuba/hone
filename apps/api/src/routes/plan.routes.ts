@@ -58,12 +58,21 @@ type PlanStorage = {
 };
 
 type PlanRouteOptions = {
-  aiRateLimiter?: Pick<AiRateLimiter, "checkAndRecord">;
+  aiRateLimiter?: {
+    checkAndRecord(
+      userId: string,
+      input?: unknown,
+      priority?: "FEEDBACK" | "NORMAL",
+      type?: "FEEDBACK" | "MESOCYCLUS",
+    ): Promise<{ id: string }>;
+  };
   authGuard?: MiddlewareHandler;
   notifier?: {
     notify(jobId: string): Promise<void>;
   };
-  ruleEngine?: Pick<RuleEngineService, "generate">;
+  ruleEngine?: {
+    generate(input: GeneratePlanOptions): Promise<MesocyclusPlanInput>;
+  };
   storage?: PlanStorage;
 };
 
@@ -112,7 +121,9 @@ const defaultStorage: PlanStorage = {
         impactFilter:
           typeof (user.constraints as { impactFilter?: unknown } | null)
             ?.impactFilter === "boolean"
-            ? Boolean((user.constraints as { impactFilter?: boolean }).impactFilter)
+            ? Boolean(
+                (user.constraints as { impactFilter?: boolean }).impactFilter,
+              )
             : false,
       },
       equipmentPool,
@@ -217,34 +228,47 @@ export function createPlanRoutes(options: PlanRouteOptions = {}) {
       userId,
       weeksCount,
     };
-    const plan = await ruleEngine.generate(planOptions);
-    const mesocyclus = await storage.createMesocyclus({ plan, userId });
-    const job = await aiRateLimiter.checkAndRecord(userId, {
-      currentWeek: 1,
-      durationWeeks: weeksCount,
-      equipmentPoolId: context.equipmentPool.id,
-      equipmentTags: context.equipmentPool.tags,
-      excludeModifiers,
-      mesocyclusId: mesocyclus.id,
-      profile: {
-        constraints: context.constraints,
-        goals: context.goals,
-      },
-      sessionMinutes,
-      type: "mesocyclus",
-    });
+    try {
+      const plan = await ruleEngine.generate(planOptions);
+      const mesocyclus = await storage.createMesocyclus({ plan, userId });
+      const job = await aiRateLimiter.checkAndRecord(
+        userId,
+        {
+          currentWeek: 1,
+          durationWeeks: weeksCount,
+          equipmentPoolId: context.equipmentPool.id,
+          equipmentTags: context.equipmentPool.tags,
+          excludeModifiers,
+          mesocyclusId: mesocyclus.id,
+          profile: {
+            constraints: context.constraints,
+            goals: context.goals,
+          },
+          sessionMinutes,
+          type: "mesocyclus",
+        },
+        "NORMAL",
+        "MESOCYCLUS",
+      );
 
-    await notifier.notify(job.id);
+      await notifier.notify(job.id);
 
-    return c.json(
-      {
-        jobId: job.id,
-        mesocyclusId: mesocyclus.id,
-        planSource: "rule_based",
-        status: "queued",
-      },
-      201,
-    );
+      return c.json(
+        {
+          jobId: job.id,
+          mesocyclusId: mesocyclus.id,
+          planSource: "rule_based",
+          status: "queued",
+        },
+        201,
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        return c.json({ status: 400, title: error.message }, 400);
+      }
+
+      throw error;
+    }
   });
 
   return planRoutes;

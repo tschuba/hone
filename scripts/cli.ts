@@ -17,11 +17,14 @@ if (command === "seed-exercises") {
 }
 
 if (command === "retry-dead-jobs") {
-  const child = Bun.spawn(["bun", "run", "apps/api/src/cli/retry-dead-jobs.ts", ...args], {
-    cwd: process.cwd(),
-    stderr: "inherit",
-    stdout: "inherit",
-  });
+  const child = Bun.spawn(
+    ["bun", "run", "apps/api/src/cli/retry-dead-jobs.ts", ...args],
+    {
+      cwd: process.cwd(),
+      stderr: "inherit",
+      stdout: "inherit",
+    },
+  );
 
   const exitCode = await child.exited;
   process.exit(exitCode);

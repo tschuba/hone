@@ -21,6 +21,7 @@ type OnboardingFormData = {
 
 const authSession = useAuthSession();
 const DRAFT_STORAGE_KEY = "onboarding-draft";
+const DASHBOARD_FLASH_KEY = "dashboard-flash";
 const STEP_ORDER: Step[] = [
   "welcome",
   "goals",
@@ -82,6 +83,14 @@ function normalizeDraft(value: unknown): OnboardingFormData {
         ? record.poolName
         : defaultFormData.poolName,
   };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (typeof error === "object" && error !== null && "title" in error) {
+    return typeof error.title === "string" ? error.title : fallback;
+  }
+
+  return fallback;
 }
 
 let isLoading = $state(true);
@@ -231,6 +240,8 @@ async function completeOnboarding() {
       goals: formData.goals.map((goal) => ({ scope: "profile", value: goal })),
     });
 
+    let resolvedPoolId = formData.poolId;
+
     if (formData.poolId) {
       await api.updateEquipmentPool(formData.poolId, {
         name: formData.poolName,
@@ -246,16 +257,54 @@ async function completeOnboarding() {
         ...formData,
         poolId: pool.id,
       };
+      resolvedPoolId = pool.id;
+    }
+
+    let dashboardFlash:
+      | {
+          kind: "error" | "success";
+          message: string;
+        }
+      | undefined;
+
+    try {
+      await api.createPlan({
+        equipmentPoolId: resolvedPoolId ?? undefined,
+        sessionMinutes: 30,
+        weeksCount: 4,
+      });
+
+      dashboardFlash = {
+        kind: "success",
+        message: "Onboarding saved. Your first training plan is ready.",
+      };
+    } catch (error) {
+      dashboardFlash = {
+        kind: "error",
+        message: `Onboarding saved, but plan generation could not be completed: ${getErrorMessage(
+          error,
+          "Please generate your plan from the dashboard.",
+        )}`,
+      };
     }
 
     if (browser) {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
+      if (dashboardFlash) {
+        sessionStorage.setItem(
+          DASHBOARD_FLASH_KEY,
+          JSON.stringify(dashboardFlash),
+        );
+      }
     }
 
     await goto("/app");
   } catch (error) {
     console.error("Failed to save onboarding", error);
-    saveError = "Unable to save your onboarding progress.";
+    saveError = getErrorMessage(
+      error,
+      "Unable to save your onboarding progress.",
+    );
   } finally {
     isSubmitting = false;
   }

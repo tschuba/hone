@@ -13,8 +13,12 @@ import {
 import { createAuthRoutes } from "./routes/auth.routes";
 import { createEquipmentRoutes } from "./routes/equipment.routes";
 import { createExerciseRoutes } from "./routes/exercise.routes";
+import { createFeedbackRoutes } from "./routes/feedback.routes";
 import { createPlanRoutes } from "./routes/plan.routes";
 import { createProfileRoutes } from "./routes/profile.routes";
+import { createSetLogRoutes } from "./routes/set-log.routes";
+import { createWorkoutSessionRoutes } from "./routes/workout-session.routes";
+import { createWorkoutRoutes } from "./routes/workout.routes";
 import { AiJobWorker } from "./workers/ai-job-worker";
 
 const app = new Hono();
@@ -22,12 +26,27 @@ const app = new Hono();
 app.use("/api/v1/auth/login", authRateLimitMiddleware);
 app.use("/api/v1/auth/register", authRateLimitMiddleware);
 app.use("*", rateLimitMiddleware);
+app.use("*", async (c, next) => {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64url");
+
+  await next();
+
+  c.header(
+    "Content-Security-Policy",
+    `default-src 'self'; object-src 'none'; base-uri 'self'; script-src 'nonce-${nonce}'; frame-ancestors 'none'`,
+  );
+  c.header("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+});
 app.use("*", csrfMiddleware);
 app.route("/api/v1/auth", createAuthRoutes());
 app.route("/api/v1/equipment-pools", createEquipmentRoutes());
 app.route("/api/v1/exercises", createExerciseRoutes());
+app.route("/api/v1/feedback", createFeedbackRoutes());
 app.route("/api/v1/plans", createPlanRoutes());
 app.route("/api/v1/users", createProfileRoutes());
+app.route("/api/v1/workout", createWorkoutRoutes());
+app.route("/api/v1/workout-sessions", createSetLogRoutes());
+app.route("/api/v1/workout-sessions", createWorkoutSessionRoutes());
 
 let bootstrapAdminUnclaimed = false;
 let aiJobWorker: AiJobWorker | null = null;
