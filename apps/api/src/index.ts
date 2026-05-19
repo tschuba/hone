@@ -13,7 +13,9 @@ import {
 import { createAuthRoutes } from "./routes/auth.routes";
 import { createEquipmentRoutes } from "./routes/equipment.routes";
 import { createExerciseRoutes } from "./routes/exercise.routes";
+import { createPlanRoutes } from "./routes/plan.routes";
 import { createProfileRoutes } from "./routes/profile.routes";
+import { AiJobWorker } from "./workers/ai-job-worker";
 
 const app = new Hono();
 
@@ -24,9 +26,11 @@ app.use("*", csrfMiddleware);
 app.route("/api/v1/auth", createAuthRoutes());
 app.route("/api/v1/equipment-pools", createEquipmentRoutes());
 app.route("/api/v1/exercises", createExerciseRoutes());
+app.route("/api/v1/plans", createPlanRoutes());
 app.route("/api/v1/users", createProfileRoutes());
 
 let bootstrapAdminUnclaimed = false;
+let aiJobWorker: AiJobWorker | null = null;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 let shuttingDown = false;
 
@@ -86,6 +90,8 @@ async function start() {
   await prisma.$connect();
   await refreshBootstrapAdminState();
   await cleanupExpiredAuthArtifacts(prisma);
+  aiJobWorker = new AiJobWorker();
+  await aiJobWorker.start();
 
   cleanupTimer = setInterval(
     () => {
@@ -115,6 +121,11 @@ async function start() {
     if (cleanupTimer) {
       clearInterval(cleanupTimer);
       cleanupTimer = null;
+    }
+
+    if (aiJobWorker) {
+      await aiJobWorker.stop();
+      aiJobWorker = null;
     }
 
     server.stop(true);
