@@ -11,6 +11,7 @@ import {
   rateLimitMiddleware,
 } from "./middleware/rate-limit";
 import { createAuthRoutes } from "./routes/auth.routes";
+import { createExerciseRoutes } from "./routes/exercise.routes";
 
 const app = new Hono();
 
@@ -19,6 +20,7 @@ app.use("/api/v1/auth/register", authRateLimitMiddleware);
 app.use("*", rateLimitMiddleware);
 app.use("*", csrfMiddleware);
 app.route("/api/v1/auth", createAuthRoutes());
+app.route("/api/v1/exercises", createExerciseRoutes());
 
 let bootstrapAdminUnclaimed = false;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;

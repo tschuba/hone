@@ -5,6 +5,7 @@
   "packageManager": "bun@1.2.15",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
+    "cli": "PATH=\"$HOME/.bun/bin:$PATH\" bun run scripts/cli.ts",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "bun test",

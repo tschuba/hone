@@ -16,7 +16,7 @@ const schema = z
     SESSION_SECRET: z.string().min(32),
     CSRF_SECRET: z.string().min(32),
     APP_URL: z.string().url().default("http://localhost:3000"),
-    PORT: z.coerce.number().default(3000),
+    PORT: z.coerce.number().default(3001),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
