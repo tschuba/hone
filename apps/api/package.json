@@ -14,11 +14,15 @@
     "@hone/shared": "file:../../packages/shared",
     "@prisma/adapter-pg": "^6.8.2",
     "@prisma/client": "^6.8.2",
+    "argon2": "^0.41.1",
     "hono": "^4.7.10",
+    "jose": "^6.1.2",
+    "openid-client": "^6.6.4",
     "pg": "^8.16.0",
     "zod": "^3.25.7"
   },
   "devDependencies": {
+    "bun-types": "^1.3.14",
     "prisma": "^6.8.2",
     "typescript": "^5.8.3"
   }
