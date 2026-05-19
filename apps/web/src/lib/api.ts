@@ -17,6 +17,26 @@ type AuthUser = {
   userId: string;
 };
 
+type EquipmentPool = {
+  id: string;
+  name: string;
+  tags: string[];
+};
+
+type ProfileConstraints = {
+  impactFilter: boolean;
+};
+
+type ProfileGoal = {
+  scope: "profile";
+  value: string;
+};
+
+type UserProfile = {
+  constraints: ProfileConstraints;
+  goals: ProfileGoal[];
+};
+
 type CsrfResponse = {
   csrfToken: string;
 };
@@ -91,10 +111,22 @@ export async function initCsrf() {
 }
 
 export const api = {
+  createEquipmentPool(name: string, tags: string[]) {
+    return request<EquipmentPool>("/equipment-pools", {
+      body: { name, tags },
+      method: "POST",
+    });
+  },
   getCurrentUser() {
     return request<AuthUser>("/auth/me");
   },
+  getProfile() {
+    return request<UserProfile>("/users/me");
+  },
   initCsrf,
+  listEquipmentPools() {
+    return request<{ items: EquipmentPool[] }>("/equipment-pools");
+  },
   login(email: string, password: string) {
     return request<{ ok: true }>("/auth/login", {
       body: { email, password },
@@ -113,4 +145,21 @@ export const api = {
     });
   },
   request,
+  updateEquipmentPool(
+    poolId: string,
+    input: { name?: string; tags?: string[] },
+  ) {
+    return request<EquipmentPool>(`/equipment-pools/${poolId}`, {
+      body: input,
+      method: "PUT",
+    });
+  },
+  updateProfile(input: UserProfile) {
+    return request<UserProfile>("/users/me", {
+      body: input,
+      method: "PUT",
+    });
+  },
 };
+
+export type { EquipmentPool, ProfileConstraints, ProfileGoal, UserProfile };
