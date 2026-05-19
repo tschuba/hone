@@ -15,9 +15,7 @@ import { DeviceServices } from "$lib/services/device-services";
 const timerState = useTimerState();
 const workoutSession = useWorkoutSession();
 const deviceServices = new DeviceServices(
-  () =>
-    todayWorkout !== null &&
-    (workoutSession.phase === "exercise" || workoutSession.phase === "rest"),
+  () => todayWorkout !== null && workoutSession.phase === "exercise",
 );
 
 let announcement = $state("Workout screen ready.");
@@ -86,6 +84,7 @@ async function moveToNextExercise() {
   if (!todayWorkout || currentIndex >= todayWorkout.exercises.length) {
     workoutSession.phase = "summary";
     announcement = "Training abgeschlossen. Gut gemacht!";
+    await goto("/workout/summary");
   } else {
     workoutSession.phase = "exercise";
     workoutSession.currentExerciseIndex = currentIndex;
@@ -118,7 +117,7 @@ async function loadWorkout() {
       currentIndex = Math.max(workout.exercises.length - 1, 0);
       workoutSession.phase = "summary";
       announcement = "Training abgeschlossen. Gut gemacht!";
-      await focusHeading();
+      await goto("/workout/summary");
       return;
     }
 
@@ -191,6 +190,7 @@ async function handleSetDone() {
       if (currentIndex >= todayWorkout.exercises.length - 1) {
         workoutSession.phase = "summary";
         announcement = "Training abgeschlossen. Gut gemacht!";
+        await goto("/workout/summary");
       } else {
         workoutSession.phase = "rest";
         timerState.configure(currentExercise.restSecs * 1000);
@@ -393,21 +393,6 @@ function formatTime(totalSeconds: number) {
         style="width: fit-content; padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
       >
         Skip rest
-      </button>
-    </section>
-  {:else}
-    <section style="display: grid; gap: var(--space-4); padding: var(--space-6); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: rgba(255,255,255,0.03);">
-      <h1 id="heading-summary" tabindex="-1" style="margin: 0;">Workout summary</h1>
-      <p style="margin: 0; color: var(--color-text-secondary);">
-        All planned exercises for this active session are logged. Complete the session to advance your rotation.
-      </p>
-      <button
-        type="button"
-        onclick={handleCompleteWorkout}
-        disabled={isBusy}
-        style="width: fit-content; padding: 0.95rem 1.2rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer;"
-      >
-        {isBusy ? "Completing…" : "Finish workout"}
       </button>
     </section>
   {/if}

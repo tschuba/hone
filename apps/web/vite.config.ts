@@ -4,6 +4,12 @@ import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig, loadEnv } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+const securityHeaders = {
+  "Content-Security-Policy":
+    "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+  "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+};
+
 export default defineConfig(({ mode }) => {
   const envDir = path.resolve(__dirname, "../..");
   const env = loadEnv(mode, envDir, "");
@@ -81,6 +87,7 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     server: {
+      headers: securityHeaders,
       port: 3000,
       proxy: {
         "/api": {
@@ -88,6 +95,9 @@ export default defineConfig(({ mode }) => {
         },
       },
       strictPort: true,
+    },
+    preview: {
+      headers: securityHeaders,
     },
     build: {
       chunkSizeWarningLimit: 250,
