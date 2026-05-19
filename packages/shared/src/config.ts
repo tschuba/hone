@@ -1,6 +1,21 @@
 import { z } from "zod";
 
 const storageProviderSchema = z.enum(["local", "s3"]);
+const profileGoalSchema = z.object({
+  scope: z.literal("profile"),
+  value: z.string().trim().min(1).max(120),
+});
+
+export const profileGoalsSchema = z.array(profileGoalSchema).default([]);
+export const profileConstraintsSchema = z
+  .object({
+    impactFilter: z.boolean().default(false),
+  })
+  .default({ impactFilter: false });
+
+export type ProfileConstraints = z.infer<typeof profileConstraintsSchema>;
+export type ProfileGoal = z.infer<typeof profileGoalSchema>;
+
 const emptyStringToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess(
     (value) =>

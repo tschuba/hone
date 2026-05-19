@@ -75,12 +75,21 @@ async function handleLogout() {
       </div>
 
       {#if authSession.isAuthenticated}
-        <a
-          href="/app"
-          style="display: inline-flex; width: fit-content; align-items: center; gap: 0.5rem; padding: 0.9rem 1.1rem; border-radius: var(--radius-md); background: rgba(252, 211, 77, 0.12); border: 1px solid rgba(252, 211, 77, 0.35); text-decoration: none; font-weight: 700;"
-        >
-          Open protected app area
-        </a>
+        <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
+          <a
+            href="/app"
+            style="display: inline-flex; width: fit-content; align-items: center; gap: 0.5rem; padding: 0.9rem 1.1rem; border-radius: var(--radius-md); background: rgba(252, 211, 77, 0.12); border: 1px solid rgba(252, 211, 77, 0.35); text-decoration: none; font-weight: 700;"
+          >
+            Open protected app area
+          </a>
+
+          <a
+            href="/onboarding"
+            style="display: inline-flex; width: fit-content; align-items: center; gap: 0.5rem; padding: 0.9rem 1.1rem; border-radius: var(--radius-md); background: rgba(255,255,255,0.04); border: 1px solid var(--color-border-subtle); text-decoration: none; font-weight: 700; color: inherit;"
+          >
+            Complete onboarding
+          </a>
+        </div>
       {/if}
 
       <div style="display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));">
