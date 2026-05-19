@@ -4,7 +4,9 @@ const storageProviderSchema = z.enum(["local", "s3"]);
 const emptyStringToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess(
     (value) =>
-      typeof value === "string" && value.trim().length === 0 ? undefined : value,
+      typeof value === "string" && value.trim().length === 0
+        ? undefined
+        : value,
     schema,
   );
 
@@ -13,6 +15,7 @@ const schema = z
     DATABASE_URL: z.string().min(1),
     SESSION_SECRET: z.string().min(32),
     CSRF_SECRET: z.string().min(32),
+    APP_URL: z.string().url().default("http://localhost:3000"),
     PORT: z.coerce.number().default(3000),
     NODE_ENV: z
       .enum(["development", "test", "production"])
@@ -25,6 +28,8 @@ const schema = z
     OIDC_ISSUER: emptyStringToUndefined(z.string().url().optional()),
     OIDC_CLIENT_ID: emptyStringToUndefined(z.string().optional()),
     OIDC_CLIENT_SECRET: emptyStringToUndefined(z.string().optional()),
+    OIDC_ROLE_CLAIM: z.string().default("groups"),
+    OIDC_ADMIN_VALUE: z.string().default("admin"),
     USE_LOCAL_AUTH_ONLY: z.coerce.boolean().default(false),
     STORAGE_PROVIDER: storageProviderSchema.default("local"),
     S3_BUCKET: emptyStringToUndefined(z.string().optional()),
@@ -43,6 +48,16 @@ const schema = z
           path: ["OIDC_ISSUER"],
           message: "OIDC_ISSUER is required when USE_LOCAL_AUTH_ONLY is false",
         });
+      }
+
+      for (const key of ["OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"] as const) {
+        if (!value[key]) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [key],
+            message: `${key} is required when USE_LOCAL_AUTH_ONLY is false`,
+          });
+        }
       }
     }
 
@@ -64,7 +79,9 @@ const schema = z
     }
   });
 
-export const config = (() => {
+type Config = z.infer<typeof schema>;
+
+export const config: Config = (() => {
   const result = schema.safeParse(process.env);
 
   if (!result.success) {

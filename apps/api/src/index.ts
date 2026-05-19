@@ -4,8 +4,21 @@ import { Hono } from "hono";
 import { config } from "@hone/shared";
 
 import { closeDatabase, db, prisma } from "./db/client";
+import { cleanupExpiredAuthArtifacts } from "./maintenance/auth-cleanup";
+import { csrfMiddleware } from "./middleware/csrf";
+import {
+  authRateLimitMiddleware,
+  rateLimitMiddleware,
+} from "./middleware/rate-limit";
+import { createAuthRoutes } from "./routes/auth.routes";
 
 const app = new Hono();
+
+app.use("/api/v1/auth/login", authRateLimitMiddleware);
+app.use("/api/v1/auth/register", authRateLimitMiddleware);
+app.use("*", rateLimitMiddleware);
+app.use("*", csrfMiddleware);
+app.route("/api/v1/auth", createAuthRoutes());
 
 let bootstrapAdminUnclaimed = false;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -33,16 +46,6 @@ async function refreshBootstrapAdminState() {
 
 async function checkDatabase() {
   await prisma.$queryRaw`SELECT 1`;
-}
-
-async function cleanupExpiredSessions() {
-  await prisma.session.deleteMany({
-    where: {
-      expiresAt: {
-        lt: new Date(),
-      },
-    },
-  });
 }
 
 app.get("/health", (c) => {
@@ -76,12 +79,12 @@ app.get("/health/ready", async (c) => {
 async function start() {
   await prisma.$connect();
   await refreshBootstrapAdminState();
-  await cleanupExpiredSessions();
+  await cleanupExpiredAuthArtifacts(prisma);
 
   cleanupTimer = setInterval(
     () => {
-      cleanupExpiredSessions().catch((error) => {
-        console.error("Session cleanup failed", error);
+      cleanupExpiredAuthArtifacts(prisma).catch((error) => {
+        console.error("Auth cleanup failed", error);
       });
     },
     5 * 60 * 1000,
