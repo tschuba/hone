@@ -9,14 +9,17 @@ Hone is a self-hosted fitness PWA with AI-assisted workout generation. This repo
 
 ## Current Repository State
 
-The repository currently contains the Sprint 0 foundation scaffold:
+The repository has moved well beyond the initial Sprint 0 scaffold. The current codebase includes working implementation across the planned MVP layers through the frontend training loop:
 
-- Bun workspace root
-- API app in `apps/api`
-- Web app in `apps/web`
-- Shared package in `packages/shared`
-- Dev infrastructure in `docker-compose.dev.yml`
-- One-command setup script in `scripts/setup.sh`
+- Sprint 0 foundation: Bun workspace, Docker dev stack, Prisma schema, shared validation package, CI-oriented tooling
+- Sprint 1 auth: local auth, OIDC flow, CSRF protection, rate limiting, session handling, auth routes/middleware
+- Sprint 2 exercise data: exercise seeding, heuristic tagging, exercise API routes
+- Sprint 3 profile and equipment: onboarding flow, profile routes, equipment pool routes
+- Sprint 4 plan generation: plan validation, deterministic rule engine, AI job queue, prompt injection detection, AI rate limiting
+- Sprint 5 workout sessions: session lifecycle, set logging, substitution, skip-today, weekly feedback
+- Sprint 6 frontend training loop: authenticated shell, dashboard, workout screen, summary screen, wake-lock/timer state, PWA shell config
+
+The main remaining implementation work is the tail of Sprint 7 (offline sync/export) and Sprint 8 hardening/deployment.
 
 ## Requirements
 
