@@ -15,3 +15,6 @@ prisma/dev.db-journal
 *.log
 .DS_Store
 uploads/
+
+# Local Claude/Copilot machine-specific settings
+.claude/settings.local.json
