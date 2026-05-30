@@ -9,6 +9,7 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,
+    "types": ["bun-types", "vite-plugin-pwa/client"],
     "verbatimModuleSyntax": true
   },
   "include": [

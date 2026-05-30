@@ -30,7 +30,11 @@ $effect(() => {
 			<div style="display: grid; gap: var(--space-2);">
 				<p style="margin: 0; color: var(--color-accent); font-weight: 700;">Hone App</p>
 				{#if authSession.isAuthenticated}
-					<p style="margin: 0; color: var(--color-text-secondary);">Signed in as {authSession.userId}</p>
+					<p style="margin: 0; color: var(--color-text-secondary);">
+						Signed in as {authSession.userId}{#if authSession.isUsingOfflineSession}
+							· offline cache
+						{/if}
+					</p>
 				{:else}
 					<p style="margin: 0; color: var(--color-text-secondary);">Checking session…</p>
 				{/if}

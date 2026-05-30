@@ -116,6 +116,8 @@ type UserProfile = {
   goals: ProfileGoal[];
 };
 
+type UserDataExport = unknown;
+
 type CsrfResponse = {
   csrfToken: string;
 };
@@ -222,6 +224,9 @@ export const api = {
   },
   getProfile() {
     return request<UserProfile>("/users/me");
+  },
+  exportUserData() {
+    return request<UserDataExport>("/users/me/export");
   },
   initCsrf,
   listExerciseSubstitutions(sessionId: string, exerciseLogId: string) {
@@ -334,5 +339,6 @@ export type {
   SetPayload,
   StartedWorkoutSession,
   UserProfile,
+  UserDataExport,
   WorkoutHistoryItem,
 };

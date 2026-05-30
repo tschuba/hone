@@ -11,6 +11,7 @@ import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
 import { useTimerState } from "$lib/context/timer-state.svelte.ts";
 import { useWorkoutSession } from "$lib/context/workout-session.svelte.ts";
 import { DeviceServices } from "$lib/services/device-services";
+import { getTodayWorkout, logSetWithOfflineFallback } from "$lib/sync";
 
 const timerState = useTimerState();
 const workoutSession = useWorkoutSession();
@@ -98,7 +99,7 @@ async function loadWorkout() {
   errorMessage = null;
 
   try {
-    const workout = await api.getActiveWorkout();
+    const workout = await getTodayWorkout();
 
     if (workout.status !== "active_session") {
       workoutSession.reset();
@@ -177,7 +178,7 @@ async function handleSetDone() {
   errorMessage = null;
 
   try {
-    await api.logSet(todayWorkout.sessionId, {
+    const result = await logSetWithOfflineFallback(todayWorkout.sessionId, {
       exerciseLogId: currentExercise.exerciseLogId,
       reps: currentExercise.reps ?? undefined,
       setNr: currentSetNumber,
@@ -204,7 +205,10 @@ async function handleSetDone() {
         syncRestTimer();
       }
     } else {
-      announcement = `Exercise ${currentExercise.name}. Set ${currentSetNumber + 1} of ${currentExercise.sets}.`;
+      announcement =
+        result.status === "queued"
+          ? `Set saved offline. It will sync when you're back online.`
+          : `Exercise ${currentExercise.name}. Set ${currentSetNumber + 1} of ${currentExercise.sets}.`;
     }
 
     await focusHeading();

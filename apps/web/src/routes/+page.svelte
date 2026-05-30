@@ -5,6 +5,7 @@ import { onMount } from "svelte";
 
 import { type ActiveWorkout, type WorkoutHistoryItem, api } from "$lib/api";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
+import { getTodayWorkout, isOfflineError } from "$lib/sync";
 
 const authSession = useAuthSession();
 const DASHBOARD_FLASH_KEY = "dashboard-flash";
@@ -81,13 +82,16 @@ async function loadDashboard() {
   feedbackSuccess = null;
 
   try {
-    const [activeWorkout, history] = await Promise.all([
-      api.getActiveWorkout(),
-      api.listWorkoutHistory(),
-    ]);
+    todayWorkout = await getTodayWorkout();
 
-    todayWorkout = activeWorkout;
-    workoutHistory = history.items;
+    try {
+      const history = await api.listWorkoutHistory();
+      workoutHistory = history.items;
+    } catch (error) {
+      if (!isOfflineError(error)) {
+        throw error;
+      }
+    }
   } catch (error) {
     screenError = getErrorMessage(error, "Unable to load workout.");
   } finally {
@@ -259,7 +263,11 @@ function formatTimestamp(value: string | null) {
         {#if !authSession.isReady}
           <p style="margin: 0; font-weight: 600;">Initializing session…</p>
         {:else if authSession.isAuthenticated}
-          <p style="margin: 0; font-weight: 600;">Signed in as {authSession.userId}</p>
+          <p style="margin: 0; font-weight: 600;">
+            Signed in as {authSession.userId}{#if authSession.isUsingOfflineSession}
+              · offline cache
+            {/if}
+          </p>
         {:else}
           <p style="margin: 0; font-weight: 600;">Not signed in</p>
         {/if}

@@ -5,6 +5,7 @@ import { onMount, tick } from "svelte";
 import { type ActiveWorkout, api } from "$lib/api";
 import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
 import { useWorkoutSession } from "$lib/context/workout-session.svelte.ts";
+import { getTodayWorkout } from "$lib/sync";
 
 const workoutSession = useWorkoutSession();
 
@@ -33,7 +34,7 @@ async function loadSummary() {
   errorMessage = null;
 
   try {
-    const activeWorkout = await api.getActiveWorkout();
+    const activeWorkout = await getTodayWorkout();
 
     if (activeWorkout.status !== "active_session") {
       workoutSession.reset();
