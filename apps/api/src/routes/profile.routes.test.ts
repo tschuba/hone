@@ -5,6 +5,7 @@ import type { AuthVariables } from "../middleware/auth";
 import { createProfileRoutes } from "./profile.routes";
 
 function createTestApp(storage: {
+  exportUserData(userId: string): Promise<unknown>;
   findUserById(userId: string): Promise<{
     constraints: { impactFilter: boolean };
     goals: Array<{ scope: "profile"; value: string }>;
@@ -50,6 +51,11 @@ describe("profile routes", () => {
           goals: [],
         };
       },
+      async exportUserData() {
+        return {
+          id: "user-1",
+        };
+      },
     });
 
     const response = await app.request("http://hone.test/api/v1/users/me");
@@ -84,6 +90,11 @@ describe("profile routes", () => {
           goals: input.goals,
         };
       },
+      async exportUserData() {
+        return {
+          id: "user-1",
+        };
+      },
     });
 
     const response = await app.request("http://hone.test/api/v1/users/me", {
@@ -103,5 +114,65 @@ describe("profile routes", () => {
       goals: [{ scope: "profile", value: "Reduce knee pain" }],
       userId: "user-1",
     });
+  });
+
+  it("returns a single-response user export", async () => {
+    const exportPayload = {
+      bodyMetrics: [{ id: "metric-1" }],
+      equipmentPools: [{ id: "pool-1", tags: ["dumbbell"] }],
+      id: "user-1",
+      mesocycluses: [
+        {
+          id: "meso-1",
+          templates: [
+            {
+              exercises: [
+                {
+                  exercise: { id: "exercise-1", nameEn: "Squat" },
+                  id: "template-exercise-1",
+                },
+              ],
+              id: "template-1",
+            },
+          ],
+        },
+      ],
+      workoutSessions: [
+        {
+          exerciseLogs: [
+            {
+              id: "exercise-log-1",
+              setLogs: [{ id: "set-1", uuid: "uuid-1" }],
+            },
+          ],
+          id: "session-1",
+        },
+      ],
+    };
+
+    const app = createTestApp({
+      async exportUserData() {
+        return exportPayload;
+      },
+      async findUserById() {
+        return {
+          constraints: { impactFilter: false },
+          goals: [],
+        };
+      },
+      async updateUser(input) {
+        return {
+          constraints: input.constraints,
+          goals: input.goals,
+        };
+      },
+    });
+
+    const response = await app.request(
+      "http://hone.test/api/v1/users/me/export",
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(exportPayload);
   });
 });

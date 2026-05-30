@@ -18,6 +18,7 @@ type ProfileRecord = {
 };
 
 type ProfileStorage = {
+  exportUserData(userId: string): Promise<unknown>;
   findUserById(userId: string): Promise<ProfileRecord | null>;
   updateUser(input: {
     constraints: ProfileConstraints;
@@ -32,6 +33,60 @@ type ProfileRouteOptions = {
 };
 
 const defaultStorage: ProfileStorage = {
+  async exportUserData(userId) {
+    return db.user.findFirst({
+      where: { id: userId },
+      include: {
+        aiJobs: {
+          include: {
+            generationLogs: true,
+          },
+        },
+        bodyMetrics: true,
+        equipmentPools: true,
+        mesocycluses: {
+          include: {
+            nextTemplate: true,
+            templates: {
+              include: {
+                exercises: {
+                  include: {
+                    exercise: true,
+                  },
+                },
+              },
+            },
+            workoutSessions: {
+              include: {
+                exerciseLogs: {
+                  include: {
+                    exercise: true,
+                    setLogs: true,
+                    substitutedForExercise: true,
+                  },
+                },
+                template: true,
+              },
+            },
+          },
+        },
+        sessions: true,
+        workoutSessions: {
+          include: {
+            exerciseLogs: {
+              include: {
+                exercise: true,
+                setLogs: true,
+                substitutedForExercise: true,
+              },
+            },
+            mesocyclus: true,
+            template: true,
+          },
+        },
+      },
+    });
+  },
   async findUserById(userId) {
     const user = await db.user.findFirst({
       where: { id: userId },
@@ -85,6 +140,16 @@ export function createProfileRoutes(options: ProfileRouteOptions = {}) {
     }
 
     return c.json(profile, 200);
+  });
+
+  profileRoutes.get("/me/export", async (c) => {
+    const exportData = await storage.exportUserData(c.get("userId"));
+
+    if (!exportData) {
+      return c.json({ status: 404, title: "User not found" }, 404);
+    }
+
+    return c.json(exportData, 200);
   });
 
   profileRoutes.put("/me", async (c) => {

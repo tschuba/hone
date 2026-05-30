@@ -50,7 +50,12 @@ app.route("/api/v1/workout-sessions", createWorkoutSessionRoutes());
 
 let bootstrapAdminUnclaimed = false;
 let aiJobWorker: AiJobWorker | null = null;
+let aiWorkerAvailable = false;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+let dbAvailable = false;
+let infraRetryTimer: ReturnType<typeof setInterval> | null = null;
+let initializingInfra = false;
+let lastInfraLogState: "degraded" | "ok" | null = null;
 let shuttingDown = false;
 
 async function refreshBootstrapAdminState() {
@@ -77,10 +82,136 @@ async function checkDatabase() {
   await prisma.$queryRaw`SELECT 1`;
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getErrorCode(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+  ) {
+    return error.code;
+  }
+
+  return null;
+}
+
+function isDatabaseUnavailableError(error: unknown) {
+  const message = getErrorMessage(error);
+  const code = getErrorCode(error);
+
+  return (
+    code === "ECONNREFUSED" ||
+    message.includes("ECONNREFUSED") ||
+    message.includes("Can't reach database server")
+  );
+}
+
+function logDegradedMode(error: unknown, prefix: string) {
+  if (lastInfraLogState === "degraded") {
+    return;
+  }
+
+  const reason = isDatabaseUnavailableError(error)
+    ? `database unavailable (${getErrorCode(error) ?? "unknown"})`
+    : getErrorMessage(error);
+
+  console.warn(`${prefix}; ${reason}`);
+  lastInfraLogState = "degraded";
+}
+
+function logRecoveredMode() {
+  if (lastInfraLogState === "ok") {
+    return;
+  }
+
+  console.info(
+    "Hone API recovered from degraded mode; database connection restored",
+  );
+  lastInfraLogState = "ok";
+}
+
+function getHealthStatus() {
+  return dbAvailable && aiWorkerAvailable ? "ok" : "degraded";
+}
+
+async function stopBackgroundServices() {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
+
+  if (aiJobWorker) {
+    await aiJobWorker.stop();
+    aiJobWorker = null;
+  }
+
+  aiWorkerAvailable = false;
+}
+
+async function initializeInfrastructure() {
+  if (initializingInfra || shuttingDown) {
+    return;
+  }
+
+  initializingInfra = true;
+
+  try {
+    await prisma.$connect();
+    await checkDatabase();
+    dbAvailable = true;
+
+    await refreshBootstrapAdminState();
+    await cleanupExpiredAuthArtifacts(prisma);
+
+    if (!aiJobWorker) {
+      const worker = new AiJobWorker();
+      await worker.start();
+      aiJobWorker = worker;
+    }
+
+    aiWorkerAvailable = true;
+    logRecoveredMode();
+
+    if (!cleanupTimer) {
+      cleanupTimer = setInterval(
+        () => {
+          cleanupExpiredAuthArtifacts(prisma).catch(async (error) => {
+            logDegradedMode(
+              error,
+              "Auth cleanup failed, switching to degraded mode",
+            );
+            dbAvailable = false;
+            bootstrapAdminUnclaimed = false;
+            await stopBackgroundServices();
+          });
+        },
+        5 * 60 * 1000,
+      );
+    }
+  } catch (error) {
+    logDegradedMode(
+      error,
+      dbAvailable || aiWorkerAvailable
+        ? "Infrastructure became unavailable, switching to degraded mode"
+        : "Starting Hone API in degraded mode",
+    );
+
+    dbAvailable = false;
+    bootstrapAdminUnclaimed = false;
+    await stopBackgroundServices();
+  } finally {
+    initializingInfra = false;
+  }
+}
+
 app.get("/health", (c) => {
   return c.json({
     bootstrapAdminUnclaimed,
-    status: "ok",
+    status: getHealthStatus(),
   });
 });
 
@@ -90,37 +221,63 @@ app.get("/health/ready", async (c) => {
 
     return c.json({
       bootstrapAdminUnclaimed,
-      status: "ok",
+      db: "ok",
+      status: getHealthStatus(),
     });
   } catch (error) {
-    console.error("Readiness check failed", error);
+    dbAvailable = false;
+    bootstrapAdminUnclaimed = false;
+    aiWorkerAvailable = false;
 
     return c.json(
       {
         bootstrapAdminUnclaimed,
-        status: "error",
+        db: "unavailable",
+        status: "degraded",
       },
       503,
     );
   }
 });
 
-async function start() {
-  await prisma.$connect();
-  await refreshBootstrapAdminState();
-  await cleanupExpiredAuthArtifacts(prisma);
-  aiJobWorker = new AiJobWorker();
-  await aiJobWorker.start();
+app.onError((error, c) => {
+  if (isDatabaseUnavailableError(error)) {
+    dbAvailable = false;
+    bootstrapAdminUnclaimed = false;
+    aiWorkerAvailable = false;
+    logDegradedMode(
+      error,
+      "Database request failed, switching to degraded mode",
+    );
 
-  cleanupTimer = setInterval(
-    () => {
-      cleanupExpiredAuthArtifacts(prisma).catch((error) => {
-        console.error("Auth cleanup failed", error);
-      });
+    void stopBackgroundServices().catch((stopError) => {
+      console.error(
+        "Failed to stop background services after database error",
+        stopError,
+      );
+    });
+
+    return c.json(
+      {
+        status: 503,
+        title: "Database unavailable",
+      },
+      503,
+    );
+  }
+
+  console.error("Unhandled API error", error);
+
+  return c.json(
+    {
+      status: 500,
+      title: "Internal server error",
     },
-    5 * 60 * 1000,
+    500,
   );
+});
 
+async function start() {
   const server = Bun.serve({
     fetch: app.fetch,
     hostname: "0.0.0.0",
@@ -128,6 +285,14 @@ async function start() {
   });
 
   console.log(`Hone API listening on http://0.0.0.0:${config.PORT}`);
+
+  await initializeInfrastructure();
+
+  infraRetryTimer = setInterval(() => {
+    initializeInfrastructure().catch((error) => {
+      console.error("Infrastructure retry failed", error);
+    });
+  }, 10_000);
 
   const shutdown = async (signal: string) => {
     if (shuttingDown) {
@@ -137,15 +302,12 @@ async function start() {
     shuttingDown = true;
     console.log(`Received ${signal}, shutting down...`);
 
-    if (cleanupTimer) {
-      clearInterval(cleanupTimer);
-      cleanupTimer = null;
+    if (infraRetryTimer) {
+      clearInterval(infraRetryTimer);
+      infraRetryTimer = null;
     }
 
-    if (aiJobWorker) {
-      await aiJobWorker.stop();
-      aiJobWorker = null;
-    }
+    await stopBackgroundServices();
 
     server.stop(true);
     await closeDatabase();
