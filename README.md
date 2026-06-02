@@ -19,7 +19,7 @@ The repository has moved well beyond the initial Sprint 0 scaffold. The current 
 - Sprint 5 workout sessions: session lifecycle, set logging, substitution, skip-today, weekly feedback
 - Sprint 6 frontend training loop: authenticated shell, dashboard, workout screen, summary screen, wake-lock/timer state, PWA shell config
 
-The main remaining implementation work is the tail of Sprint 7 (offline sync/export) and Sprint 8 hardening/deployment.
+The main remaining implementation work is the tail of Sprint 7 (offline sync/export hardening) and Sprint 8 hardening/deployment.
 
 ## Requirements
 

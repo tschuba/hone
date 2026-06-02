@@ -1913,7 +1913,7 @@ export class DeviceServices {
 
 ## Sprint 7: PWA + Offline Sync (3–4 days)
 
-**Goal:** App works fully offline. Sets logged offline sync automatically on reconnect. GDPR export endpoint.
+**Goal:** App supports the narrowed offline MVP: resume an active workout, queue sets, queue workout completion, replay before refresh, and expose minimal sync/recovery state. Unsupported workout mutations remain online-only.
 
 ### Task 7.1: Dexie.js offline store
 
@@ -1994,7 +1994,7 @@ export async function syncPendingOps() {
 }
 ```
 
-> **[Frontend]** SW update strategy: use `registerType: 'prompt'`. When SW update is detected, emit `sw-update-available` event. Show banner "Update bereit — wird nach deinem Training angewendet." Call `SKIP_WAITING` only when `WorkoutPhase === 'summary'`.
+> **[Frontend]** SW update strategy: use `registerType: 'prompt'`. When SW update is detected, emit `sw-update-available` event. Show banner "Update bereit — wird nach deinem Training angewendet." Call `SKIP_WAITING` only when there is no resumable workout and no pending sync work.
 
 ### Task 7.3: GDPR export endpoint
 
@@ -2026,6 +2026,8 @@ app.get('/api/v1/users/me/export', authMiddleware, async (c) => {
 - [ ] Log set while offline → sync appears in DB after going online
 - [ ] Same set UUID synced twice → second sync returns 200, no duplicate in DB
 - [ ] SW update banner appears; update only applies on workout summary screen
+- [ ] Offline completion queues and replays after pending sets
+- [ ] Storage wipe or missing sentinel enters recovery mode
 - [ ] `GET /api/v1/users/me/export` returns all user data in one response
 - [ ] App installs as PWA and functions fully offline after first visit
 

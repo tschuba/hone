@@ -159,6 +159,12 @@ async function handlePrimaryWorkoutAction() {
     await api.startSession(todayWorkout.templateId);
     await goto("/workout");
   } catch (error) {
+    if (isOfflineError(error)) {
+      screenError =
+        "Starting a workout is unavailable offline. Reconnect to begin this session.";
+      return;
+    }
+
     screenError = getErrorMessage(error, "Unable to start workout.");
   } finally {
     isStartingWorkout = false;
@@ -179,6 +185,12 @@ async function handleGeneratePlan() {
     planSuccess = "Plan created. Your first workout is ready.";
     await loadDashboard();
   } catch (error) {
+    if (isOfflineError(error)) {
+      screenError =
+        "Plan generation is unavailable offline. Reconnect to create a new plan.";
+      return;
+    }
+
     screenError = getErrorMessage(error, "Unable to generate plan.");
   } finally {
     isGeneratingPlan = false;
@@ -198,6 +210,12 @@ async function handleSkipWorkout() {
     await api.skipToday(todayWorkout.mesocyclusId);
     await loadDashboard();
   } catch (error) {
+    if (isOfflineError(error)) {
+      screenError =
+        "Skipping today’s workout is unavailable offline. Reconnect to change your schedule.";
+      return;
+    }
+
     screenError = getErrorMessage(error, "Unable to skip workout.");
   } finally {
     isSkippingWorkout = false;
@@ -225,6 +243,12 @@ async function handleFeedbackSubmit() {
     });
     feedbackSuccess = "Feedback received. A new plan job is queued.";
   } catch (error) {
+    if (isOfflineError(error)) {
+      screenError =
+        "Feedback submission is unavailable offline. Reconnect to send this update.";
+      return;
+    }
+
     screenError = getErrorMessage(error, "Unable to submit feedback.");
   } finally {
     isSubmittingFeedback = false;

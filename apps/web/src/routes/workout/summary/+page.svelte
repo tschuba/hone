@@ -5,13 +5,17 @@ import { onMount, tick } from "svelte";
 import { type ActiveWorkout, api } from "$lib/api";
 import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
 import { useWorkoutSession } from "$lib/context/workout-session.svelte.ts";
-import { getTodayWorkout } from "$lib/sync";
+import {
+  completeWorkoutWithOfflineFallback,
+  getTodayWorkout,
+} from "$lib/sync";
 
 const workoutSession = useWorkoutSession();
 
 let announcement = $state("Workout summary ready.");
 let errorMessage = $state<string | null>(null);
 let isBusy = $state(false);
+let completionQueued = $state(false);
 let workout = $state<Extract<
   ActiveWorkout,
   { status: "active_session" }
@@ -75,7 +79,15 @@ async function handleCompleteWorkout() {
   errorMessage = null;
 
   try {
-    await api.completeWorkoutSession(workout.sessionId);
+    const result = await completeWorkoutWithOfflineFallback(workout.sessionId);
+
+    if (result.status === "queued") {
+      completionQueued = true;
+      announcement =
+        "Workout completion queued. Reconnect to finish syncing this session.";
+      return;
+    }
+
     workoutSession.reset();
     await goto("/");
   } catch (error) {
@@ -121,10 +133,14 @@ async function handleCompleteWorkout() {
       <button
         type="button"
         onclick={handleCompleteWorkout}
-        disabled={isBusy}
+        disabled={isBusy || completionQueued}
         style="width: fit-content; padding: 0.95rem 1.2rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer;"
       >
-        {isBusy ? "Completing…" : "Finish workout"}
+        {completionQueued
+          ? "Completion queued"
+          : isBusy
+            ? "Completing…"
+            : "Finish workout"}
       </button>
     </section>
   {/if}

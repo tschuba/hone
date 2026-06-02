@@ -4,6 +4,7 @@ import { api, setUnauthorizedHandler } from "$lib/api";
 import { offlineStore } from "$lib/db/offline-store";
 import {
   createOfflineUnavailableError,
+  createStorageRecoveryError,
   getErrorStatus,
   isBackendUnavailableError,
 } from "$lib/network-errors";
@@ -42,7 +43,7 @@ class AuthSessionContext {
     setUnauthorizedHandler(() => {
       this.userId = null;
       this.isUsingOfflineSession = false;
-      void offlineStore.clearCachedAuthUserId().catch((error) => {
+      void offlineStore.clearCachedAuthUserState().catch((error) => {
         console.error("Failed to clear cached auth state", error);
       });
 
@@ -54,6 +55,19 @@ class AuthSessionContext {
 
   async initialize() {
     const cachedUserId = await offlineStore.getCachedAuthUserId();
+    const storageHealth = await offlineStore.validateOfflineState();
+
+    if (storageHealth === "recovery") {
+      this.userId = null;
+      this.isUsingOfflineSession = false;
+      this.error = getErrorMessage(
+        createStorageRecoveryError(
+          "Offline storage was reset or is unavailable. Reconnect online to restore your session and workout state.",
+        ),
+      );
+      this.isReady = true;
+      return;
+    }
 
     try {
       await api.initCsrf();
@@ -65,13 +79,14 @@ class AuthSessionContext {
       await offlineStore.setCachedAuthUserId(currentUser.userId);
     } catch (error) {
       if (getErrorStatus(error) === 401) {
-        await offlineStore.clearCachedAuthUserId();
+        await offlineStore.clearCachedAuthUserState();
         this.userId = null;
         this.isUsingOfflineSession = false;
       } else if (isBackendUnavailableError(error) && cachedUserId) {
         this.userId = cachedUserId.value;
         this.isUsingOfflineSession = true;
         this.error = null;
+        await offlineStore.setCachedAuthUserId(cachedUserId.value);
       } else if (isBackendUnavailableError(error)) {
         this.userId = null;
         this.isUsingOfflineSession = false;
@@ -119,7 +134,7 @@ class AuthSessionContext {
       await api.logout();
       this.userId = null;
       this.isUsingOfflineSession = false;
-      await offlineStore.clearCachedAuthUserId();
+      await offlineStore.clearCachedAuthUserState();
     } catch (error) {
       this.error = getErrorMessage(error);
       throw error;

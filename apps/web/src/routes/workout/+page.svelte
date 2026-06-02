@@ -10,8 +10,14 @@ import {
 import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
 import { useTimerState } from "$lib/context/timer-state.svelte.ts";
 import { useWorkoutSession } from "$lib/context/workout-session.svelte.ts";
+import { offlineStore } from "$lib/db/offline-store";
 import { DeviceServices } from "$lib/services/device-services";
-import { getTodayWorkout, logSetWithOfflineFallback } from "$lib/sync";
+import {
+  completeWorkoutWithOfflineFallback,
+  getTodayWorkout,
+  isOfflineError,
+  logSetWithOfflineFallback,
+} from "$lib/sync";
 
 const timerState = useTimerState();
 const workoutSession = useWorkoutSession();
@@ -228,7 +234,16 @@ async function handleCompleteWorkout() {
   errorMessage = null;
 
   try {
-    await api.completeWorkoutSession(todayWorkout.sessionId);
+    const result = await completeWorkoutWithOfflineFallback(
+      todayWorkout.sessionId,
+    );
+
+    if (result.status === "queued") {
+      announcement =
+        "Workout completion queued. Reconnect to finish syncing this session.";
+      return;
+    }
+
     workoutSession.reset();
     await goto("/");
   } catch (error) {
@@ -265,6 +280,16 @@ async function handleToggleSubstitutions() {
   }
 }
 
+async function handleAbandonWorkout() {
+  if (!window.confirm("Abandon this workout? Any unsynced sets will be discarded.")) {
+    return;
+  }
+
+  await offlineStore.resetCurrentUserWorkoutState();
+  workoutSession.reset();
+  await goto("/");
+}
+
 async function handleSubstituteExercise(exerciseId: string) {
   if (!todayWorkout?.sessionId || !currentExercise?.exerciseLogId) {
     return;
@@ -282,6 +307,12 @@ async function handleSubstituteExercise(exerciseId: string) {
     announcement = `Exercise changed to ${replacement.name}.`;
     await loadWorkout();
   } catch (error) {
+    if (isOfflineError(error)) {
+      errorMessage =
+        "Exercise substitutions are unavailable offline. Reconnect to change this exercise.";
+      return;
+    }
+
     errorMessage = getErrorMessage(error, "Unable to substitute exercise.");
   } finally {
     isSubstituting = false;
@@ -349,6 +380,14 @@ function formatTime(totalSeconds: number) {
               ? "Hide alternatives"
               : "Swap exercise"}
         </button>
+        <button
+          type="button"
+          onclick={handleAbandonWorkout}
+          disabled={isBusy}
+          style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: var(--color-text-secondary); font-weight: 700; cursor: pointer;"
+        >
+          Abandon workout
+        </button>
       </div>
 
       {#if showSubstitutions}
@@ -391,13 +430,22 @@ function formatTime(totalSeconds: number) {
       <time aria-label={`${restSecondsRemaining} seconds remaining`} style="font-size: clamp(2rem, 10vw, 4rem); font-weight: 800;">
         {formatTime(restSecondsRemaining)}
       </time>
-      <button
-        type="button"
-        onclick={moveToNextExercise}
-        style="width: fit-content; padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
-      >
-        Skip rest
-      </button>
+      <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
+        <button
+          type="button"
+          onclick={moveToNextExercise}
+          style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
+        >
+          Skip rest
+        </button>
+        <button
+          type="button"
+          onclick={handleAbandonWorkout}
+          style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: var(--color-text-secondary); font-weight: 700; cursor: pointer;"
+        >
+          Abandon workout
+        </button>
+      </div>
     </section>
   {/if}
 </main>
