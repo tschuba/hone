@@ -120,8 +120,10 @@ function createPendingSkipToday(mesocyclusId: string): PendingOp {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createClient(overrides: Partial<Record<string, (...args: any[]) => Promise<any>>> = {}) {
+function createClient(
+  // biome-ignore lint/suspicious/noExplicitAny: test factory
+  overrides: Partial<Record<string, (...args: any[]) => Promise<any>>> = {},
+) {
   return {
     async completeWorkoutSession() {
       throw new Error("not used");
@@ -148,8 +150,10 @@ function createClient(overrides: Partial<Record<string, (...args: any[]) => Prom
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createStore(overrides: Partial<Record<string, (...args: any[]) => Promise<any>>> = {}) {
+function createStore(
+  // biome-ignore lint/suspicious/noExplicitAny: test factory
+  overrides: Partial<Record<string, (...args: any[]) => Promise<any>>> = {},
+) {
   return {
     async applyQueuedSetToCachedWorkout() {},
     async cacheActiveWorkout() {},
@@ -330,7 +334,11 @@ describe("sync helpers", () => {
       client: createClient({
         async completeWorkoutSession(sessionId) {
           flushed.push(`complete:${sessionId}`);
-          return { completedAt: new Date(), id: sessionId, status: "COMPLETED" };
+          return {
+            completedAt: new Date(),
+            id: sessionId,
+            status: "COMPLETED",
+          };
         },
         async logSet(sessionId, payload) {
           flushed.push(`set:${sessionId}:${payload.uuid}`);
@@ -483,7 +491,11 @@ describe("sync helpers", () => {
     await syncPendingOps({
       client: createClient({
         async completeWorkoutSession() {
-          return { completedAt: new Date(), id: "session-1", status: "COMPLETED" };
+          return {
+            completedAt: new Date(),
+            id: "session-1",
+            status: "COMPLETED",
+          };
         },
         async logSet(_sessionId, payload) {
           return {
@@ -742,8 +754,11 @@ describe("sync helpers", () => {
   });
 
   it("calls queueSubstitution when substituteExercise is called offline", async () => {
-    const queued: Array<{ exerciseId: string; exerciseLogId: string; sessionId: string }> =
-      [];
+    const queued: Array<{
+      exerciseId: string;
+      exerciseLogId: string;
+      sessionId: string;
+    }> = [];
 
     const result = await substituteExerciseWithOfflineFallback(
       "session-1",
@@ -765,7 +780,11 @@ describe("sync helpers", () => {
 
     expect(result.status).toBe("queued");
     expect(queued).toEqual([
-      { exerciseId: "exercise-new", exerciseLogId: "exercise-log-1", sessionId: "session-1" },
+      {
+        exerciseId: "exercise-new",
+        exerciseLogId: "exercise-log-1",
+        sessionId: "session-1",
+      },
     ]);
   });
 });

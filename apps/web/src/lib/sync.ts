@@ -171,7 +171,7 @@ async function flushOp(
 
     default: {
       const _: never = op;
-      throw new Error(`Unsupported pending operation`);
+      throw new Error("Unsupported pending operation");
     }
   }
 }
@@ -325,7 +325,7 @@ export async function getTodayWorkout(
           replayResult.blockedReason === "reauthentication"
             ? "Please sign in again before we continue syncing your workout."
             : "Workout sync is blocked until the conflict is resolved.",
-          replayResult.blockedReason!,
+          replayResult.blockedReason ?? "conflict",
         );
       }
     }

@@ -297,7 +297,10 @@ export class OfflineStore extends Dexie {
 
   async getBlockedSyncReason(userId?: string) {
     const scope = userId ?? GLOBAL_SYNC_SCOPE;
-    const meta = await this.getScopedSyncMeta(scope, BLOCKED_SYNC_REASON_META_KEY);
+    const meta = await this.getScopedSyncMeta(
+      scope,
+      BLOCKED_SYNC_REASON_META_KEY,
+    );
 
     return meta?.value as SyncBlockedReason | undefined;
   }
@@ -326,10 +329,7 @@ export class OfflineStore extends Dexie {
 
   async listPendingOps(userId?: string) {
     const scope = await this.requireCurrentUserId(userId);
-    return this.pendingOps
-      .where("userId")
-      .equals(scope)
-      .sortBy("createdAt");
+    return this.pendingOps.where("userId").equals(scope).sortBy("createdAt");
   }
 
   async listPendingOpsCount(userId?: string) {
@@ -359,9 +359,7 @@ export class OfflineStore extends Dexie {
       await this.pendingOps
         .where("entityId")
         .equals(mesocyclusId)
-        .filter(
-          (op) => op.userId === scope && op.entityType === "feedback",
-        )
+        .filter((op) => op.userId === scope && op.entityType === "feedback")
         .delete();
 
       await this.pendingOps.add({
@@ -415,9 +413,7 @@ export class OfflineStore extends Dexie {
       await this.pendingOps
         .where("entityId")
         .equals(exerciseLogId)
-        .filter(
-          (op) => op.userId === scope && op.entityType === "substitution",
-        )
+        .filter((op) => op.userId === scope && op.entityType === "substitution")
         .delete();
 
       await this.pendingOps.add({
@@ -452,7 +448,10 @@ export class OfflineStore extends Dexie {
     await this.clearCurrentUserOfflineState();
   }
 
-  async setBlockedSyncReason(reason: SyncBlockedReason | null, userId?: string) {
+  async setBlockedSyncReason(
+    reason: SyncBlockedReason | null,
+    userId?: string,
+  ) {
     const scope = await this.requireCurrentUserId(userId);
 
     if (!reason) {
@@ -464,7 +463,11 @@ export class OfflineStore extends Dexie {
   }
 
   async setCachedAuthUserId(userId: string) {
-    await this.putScopedSyncMeta(GLOBAL_SYNC_SCOPE, AUTH_USER_ID_META_KEY, userId);
+    await this.putScopedSyncMeta(
+      GLOBAL_SYNC_SCOPE,
+      AUTH_USER_ID_META_KEY,
+      userId,
+    );
     writeBrowserSentinel();
   }
 

@@ -282,7 +282,11 @@ async function handleToggleSubstitutions() {
 }
 
 async function handleAbandonWorkout() {
-  if (!window.confirm("Abandon this workout? Any unsynced sets will be discarded.")) {
+  if (
+    !window.confirm(
+      "Abandon this workout? Any unsynced sets will be discarded.",
+    )
+  ) {
     return;
   }
 
@@ -307,7 +311,8 @@ async function handleSubstituteExercise(exerciseId: string) {
     );
 
     if (result.status === "queued") {
-      announcement = "Exercise substitution queued. It will sync when you reconnect.";
+      announcement =
+        "Exercise substitution queued. It will sync when you reconnect.";
       showSubstitutions = false;
       return;
     }

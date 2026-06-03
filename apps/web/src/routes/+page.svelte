@@ -212,7 +212,9 @@ async function handleSkipWorkout() {
   feedbackSuccess = null;
 
   try {
-    const result = await skipTodayWithOfflineFallback(todayWorkout.mesocyclusId);
+    const result = await skipTodayWithOfflineFallback(
+      todayWorkout.mesocyclusId,
+    );
 
     if (result.status === "queued") {
       todayWorkout = { status: "empty" };

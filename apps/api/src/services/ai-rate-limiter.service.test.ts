@@ -60,7 +60,12 @@ describe("AiRateLimiter", () => {
       () => new Date(now),
     );
 
-    await rateLimiter.checkAndRecord("user-1", undefined, "FEEDBACK", "FEEDBACK");
+    await rateLimiter.checkAndRecord(
+      "user-1",
+      undefined,
+      "FEEDBACK",
+      "FEEDBACK",
+    );
 
     await expect(
       rateLimiter.checkAndRecord("user-1", undefined, "FEEDBACK", "FEEDBACK"),
