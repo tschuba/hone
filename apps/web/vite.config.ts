@@ -71,17 +71,6 @@ export default defineConfig(({ mode }) => {
               },
               urlPattern: ({ url }) => url.pathname.endsWith(".webp"),
             },
-            {
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "hone-api",
-                networkTimeoutSeconds: 5,
-                expiration: {
-                  maxEntries: 100,
-                },
-              },
-              urlPattern: ({ url }) => url.pathname.startsWith("/api/"),
-            },
           ],
         },
       }),

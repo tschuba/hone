@@ -5,7 +5,12 @@ import { onMount } from "svelte";
 
 import { type ActiveWorkout, type WorkoutHistoryItem, api } from "$lib/api";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
-import { getTodayWorkout, isOfflineError } from "$lib/sync";
+import {
+  getTodayWorkout,
+  isOfflineError,
+  skipTodayWithOfflineFallback,
+  submitFeedbackWithOfflineFallback,
+} from "$lib/sync";
 
 const authSession = useAuthSession();
 const DASHBOARD_FLASH_KEY = "dashboard-flash";
@@ -159,6 +164,12 @@ async function handlePrimaryWorkoutAction() {
     await api.startSession(todayWorkout.templateId);
     await goto("/workout");
   } catch (error) {
+    if (isOfflineError(error)) {
+      screenError =
+        "Starting a workout is unavailable offline. Reconnect to begin this session.";
+      return;
+    }
+
     screenError = getErrorMessage(error, "Unable to start workout.");
   } finally {
     isStartingWorkout = false;
@@ -179,6 +190,12 @@ async function handleGeneratePlan() {
     planSuccess = "Plan created. Your first workout is ready.";
     await loadDashboard();
   } catch (error) {
+    if (isOfflineError(error)) {
+      screenError =
+        "Plan generation is unavailable offline. Reconnect to create a new plan.";
+      return;
+    }
+
     screenError = getErrorMessage(error, "Unable to generate plan.");
   } finally {
     isGeneratingPlan = false;
@@ -195,7 +212,16 @@ async function handleSkipWorkout() {
   feedbackSuccess = null;
 
   try {
-    await api.skipToday(todayWorkout.mesocyclusId);
+    const result = await skipTodayWithOfflineFallback(
+      todayWorkout.mesocyclusId,
+    );
+
+    if (result.status === "queued") {
+      todayWorkout = { status: "empty" };
+      feedbackSuccess = "Skip queued. It will sync when you reconnect.";
+      return;
+    }
+
     await loadDashboard();
   } catch (error) {
     screenError = getErrorMessage(error, "Unable to skip workout.");
@@ -218,12 +244,16 @@ async function handleFeedbackSubmit() {
   feedbackSuccess = null;
 
   try {
-    await api.submitFeedback({
-      difficulty: feedbackDifficulty,
-      mesocyclusId: todayWorkout.mesocyclusId,
-      variety: feedbackVariety,
-    });
-    feedbackSuccess = "Feedback received. A new plan job is queued.";
+    const result = await submitFeedbackWithOfflineFallback(
+      todayWorkout.mesocyclusId,
+      feedbackDifficulty,
+      feedbackVariety,
+    );
+
+    feedbackSuccess =
+      result.status === "queued"
+        ? "Feedback queued. It will be submitted when you reconnect."
+        : "Feedback received. A new plan job is queued.";
   } catch (error) {
     screenError = getErrorMessage(error, "Unable to submit feedback.");
   } finally {

@@ -7,7 +7,7 @@ import { createAudioSettings } from "$lib/context/audio-settings.svelte.ts";
 import { createAuthSession } from "$lib/context/auth-session.svelte.ts";
 import { createTimerState } from "$lib/context/timer-state.svelte.ts";
 import { createWorkoutSession } from "$lib/context/workout-session.svelte.ts";
-import { syncPendingOps } from "$lib/sync";
+import { getSyncStatus, syncPendingOps } from "$lib/sync";
 
 const authSession = createAuthSession();
 const workoutSession = createWorkoutSession();
@@ -17,8 +17,18 @@ let isOffline = $state(false);
 let swUpdateAvailable = $state(false);
 let swUpdateError = $state<string | null>(null);
 let lastSyncedUserId = $state<string | null>(null);
+let syncState = $state<Awaited<ReturnType<typeof getSyncStatus>> | null>(null);
 let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | null =
   null;
+
+async function refreshSyncState() {
+  if (!authSession.isAuthenticated) {
+    syncState = null;
+    return;
+  }
+
+  syncState = await getSyncStatus();
+}
 
 onMount(() => {
   isOffline = !navigator.onLine;
@@ -34,9 +44,11 @@ onMount(() => {
     isOffline = false;
 
     if (authSession.isAuthenticated) {
-      syncPendingOps().catch((error) => {
-        console.error("Failed to sync pending offline operations", error);
-      });
+      void syncPendingOps()
+        .then(() => refreshSyncState())
+        .catch((error) => {
+          console.error("Failed to sync pending offline operations", error);
+        });
     }
   };
   const handleOffline = () => {
@@ -50,6 +62,8 @@ onMount(() => {
     console.error("Failed to initialize auth session", error);
   });
 
+  void refreshSyncState();
+
   return () => {
     window.removeEventListener("online", handleOnline);
     window.removeEventListener("offline", handleOffline);
@@ -59,6 +73,7 @@ onMount(() => {
 $effect(() => {
   if (!authSession.isAuthenticated) {
     lastSyncedUserId = null;
+    syncState = null;
     return;
   }
 
@@ -67,9 +82,11 @@ $effect(() => {
   }
 
   lastSyncedUserId = authSession.userId;
-  void syncPendingOps().catch((error) => {
-    console.error("Failed to sync pending offline operations", error);
-  });
+  void syncPendingOps()
+    .then(() => refreshSyncState())
+    .catch((error) => {
+      console.error("Failed to sync pending offline operations", error);
+    });
 });
 
 $effect(() => {
@@ -78,6 +95,10 @@ $effect(() => {
     workoutSession.phase !== "summary" ||
     !updateServiceWorker
   ) {
+    return;
+  }
+
+  if (syncState?.workoutActive || (syncState?.pendingCount ?? 0) > 0) {
     return;
   }
 
@@ -116,6 +137,27 @@ const { children } = $props();
     style="position: sticky; top: 0; z-index: 10; padding: 0.85rem 1rem; background: rgba(248, 113, 113, 0.16); border-bottom: 1px solid rgba(248, 113, 113, 0.35); color: #fecaca; text-align: center; font-weight: 600;"
   >
     {swUpdateError}
+  </div>
+{/if}
+
+{#if authSession.isAuthenticated && syncState && (syncState.pendingCount > 0 || syncState.blockedReason || syncState.storageStatus === "recovery")}
+  <div
+    role="status"
+    aria-live="polite"
+    style="position: sticky; top: 0; z-index: 5; padding: 0.85rem 1rem; background: rgba(34, 197, 94, 0.14); border-bottom: 1px solid rgba(34, 197, 94, 0.28); color: #bbf7d0; text-align: center; font-weight: 600;"
+  >
+    {#if syncState.storageStatus === "recovery"}
+      Offline storage needs recovery before new synced data can be trusted.
+    {:else if syncState.blockedReason === "reauthentication"}
+      Sync blocked until you sign in again. {syncState.pendingCount} item(s) remain queued.
+    {:else if syncState.blockedReason}
+      Sync blocked. {syncState.pendingCount} item(s) remain queued.
+    {:else}
+      {syncState.pendingCount} item(s) queued for sync.
+      {#if syncState.lastSuccessfulReplayAt}
+        Last replay {new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(syncState.lastSuccessfulReplayAt))}.
+      {/if}
+    {/if}
   </div>
 {/if}
 

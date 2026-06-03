@@ -15,18 +15,39 @@ export function isBackendUnavailableError(error: unknown) {
     return true;
   }
 
-  if (error instanceof TypeError) {
+  if (
+    error instanceof TypeError &&
+    /failed to fetch|networkerror|load failed/i.test(error.message)
+  ) {
     return true;
   }
 
   const status = getErrorStatus(error);
 
-  return typeof status === "number" && status >= 500;
+  return status === 502 || status === 503 || status === 504;
 }
 
 export function createOfflineUnavailableError(title: string) {
   return {
     status: 503,
+    title,
+  };
+}
+
+export function createStorageRecoveryError(title: string) {
+  return {
+    status: 507,
+    title,
+  };
+}
+
+export function createSyncBlockedError(
+  title: string,
+  reason: "blocked" | "reauthentication" | "conflict" | "storage",
+) {
+  return {
+    reason,
+    status: 409,
     title,
   };
 }

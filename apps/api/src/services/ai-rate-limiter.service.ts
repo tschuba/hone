@@ -9,26 +9,34 @@ type AiJobSummary = {
   userId: string;
 };
 
+type JobType = "FEEDBACK" | "MESOCYCLUS";
+
 type AiJobStore = {
-  countJobsSince(input: { since: Date; userId: string }): Promise<number>;
+  countJobsSince(input: {
+    since: Date;
+    type?: JobType;
+    userId: string;
+  }): Promise<number>;
   createJob(input: {
     input?: Prisma.InputJsonValue;
     priority?: "FEEDBACK" | "NORMAL";
-    type?: "FEEDBACK" | "MESOCYCLUS";
+    type?: JobType;
     userId: string;
   }): Promise<AiJobSummary>;
-  findActiveJob(userId: string): Promise<AiJobSummary | null>;
+  findActiveJob(userId: string, type?: JobType): Promise<AiJobSummary | null>;
   findRecentJob(input: {
     since: Date;
+    type?: JobType;
     userId: string;
   }): Promise<AiJobSummary | null>;
 };
 
 const defaultStore: AiJobStore = {
-  async countJobsSince({ since, userId }) {
+  async countJobsSince({ since, type, userId }) {
     return db.aiJob.count({
       where: {
         createdAt: { gte: since },
+        ...(type ? { type } : {}),
         userId,
       },
     });
@@ -51,10 +59,11 @@ const defaultStore: AiJobStore = {
     });
   },
 
-  async findActiveJob(userId) {
+  async findActiveJob(userId, type) {
     return db.aiJob.findFirst({
       where: {
         status: { in: ["PENDING", "PROCESSING"] },
+        ...(type ? { type } : {}),
         userId,
       },
       select: {
@@ -66,10 +75,11 @@ const defaultStore: AiJobStore = {
     });
   },
 
-  async findRecentJob({ since, userId }) {
+  async findRecentJob({ since, type, userId }) {
     return db.aiJob.findFirst({
       where: {
         createdAt: { gte: since },
+        ...(type ? { type } : {}),
         userId,
       },
       orderBy: {
@@ -103,9 +113,9 @@ export class AiRateLimiter {
     startOfDay.setHours(0, 0, 0, 0);
 
     const [recentJob, activeJob, todayCount] = await Promise.all([
-      this.store.findRecentJob({ since: sixtyMinsAgo, userId }),
-      this.store.findActiveJob(userId),
-      this.store.countJobsSince({ since: startOfDay, userId }),
+      this.store.findRecentJob({ since: sixtyMinsAgo, type, userId }),
+      this.store.findActiveJob(userId, type),
+      this.store.countJobsSince({ since: startOfDay, type, userId }),
     ]);
 
     if (recentJob) {

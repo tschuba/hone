@@ -982,29 +982,31 @@ Feedback und Trainingshistorie werden in PostgreSQL gespeichert und bei jeder Pl
 
 ```typescript
 // workout_queue: Pending-Operations (Set abgeschlossen, Workout beendet)
-// current_workout: Aktives Training gecacht beim Start-Tap
-// sync_meta: Letzter Sync-Zeitstempel, Offline-Status, PWA-Install-Banner-gesehen, workout_active-Flag
+// active_workout: Aktives Training pro Benutzer gecacht beim Start-Tap
+// sync_meta: Letzter Sync-Zeitstempel, Sync-Blocker, Storage-Sentinel, workout_active-Flag
 ```
 
-**`current_workout` Invalidierungsvertrag:**
+**`active_workout` Invalidierungsvertrag:**
 
 | Ereignis | Verhalten |
 | --- | --- |
-| WorkoutSummary-Route `/workout/summary` erreicht | `current_workout` löschen |
-| User wählt "Training abbrechen" | `current_workout` löschen |
-| iOS-15.4-Sentinel-Recovery | `current_workout` löschen + Resync |
-| Max-Age 24 Stunden überschritten | `current_workout` löschen + Toast "Training abgelaufen" |
-| Browserneustart | `current_workout` **bleibt** — Training kann fortgesetzt werden |
-| SW-Update während Training | `current_workout` **bleibt** — Schutz via `workout_active`-Flag (B2) |
+| Workout abgeschlossen und Sync bestätigt | `active_workout` löschen |
+| User wählt "Training abbrechen" | `active_workout` löschen |
+| Logout oder User-Wechsel | Benutzerbezogene Offline-Daten löschen oder entkoppeln |
+| Storage-Recovery / Wipe erkannt | `active_workout` löschen + Recovery-Toast |
+| Max-Age 24 Stunden überschritten | `active_workout` löschen + Toast "Training abgelaufen" |
+| Browserneustart | `active_workout` **bleibt** — Training kann fortgesetzt werden |
+| SW-Update während Training | `active_workout` **bleibt** — Schutz via `workout_active`-Flag (B2) |
 
-**Refresh auf `/workout`:** App prüft `current_workout` beim Mount. Vorhanden + < 24h → Training-State wiederherstellen. Vorhanden + > 24h → löschen + Toast + Redirect `/`. Leer → Redirect `/`.
+**Refresh auf `/workout`:** App prüft `active_workout` beim Mount. Vorhanden + < 24h → Training-State wiederherstellen. Vorhanden + > 24h → löschen + Toast + Redirect `/`. Leer → Redirect `/`.
 
 **Workout-Start-Tap → sofortiges Cachen:**
 
 - WorkoutTemplate + alle Übungen des Workouts
 - Bilder bereits via Service Worker gecacht
 - Profil-Daten (Einschränkungen, Präferenzen)
-- Training läuft danach vollständig offline — NAS-Ausfall kein Problem
+- Offline-sichere MVP-Flows: aktives Workout fortsetzen, Sets als Queue schreiben, Workout-Abschluss als Queue schreiben
+- Unsupported Mutationen wie Substitution, Profiländerungen und Plan-Management bleiben online-only
 
 **Training-Start-Tap Include-Strategie:** Einzelne tiefe Prisma-Query statt N+1-Aufrufe:
 
@@ -1037,15 +1039,16 @@ Alle Daten (Template + Exercises + Tags + Bilder-URLs) in einem Datenbankaufruf 
 
    Der Client generiert `uuid` (UUIDv4) lokal beim Set-Abschluss. Server prüft: existiert `uuid` bereits → `200 OK` (idempotente Bestätigung); existiert nicht → `201 Created`. `4xx`-Fehler (außer `429`) werden nicht retried. `429` → exponentieller Backoff, max. 5 Versuche.
 
-2. Sofort an Server senden (wenn online) + bei Erfolg aus Queue entfernen
-3. Beim App-Öffnen: ausstehende Queue-Einträge zuerst senden, dann Server-State laden
+2. Nutzer schließt Workout ab → Completion-Op in `workout_queue` schreiben
+3. Sofort an Server senden (wenn online) + bei Erfolg aus Queue entfernen
+4. Beim App-Öffnen, Auth-Restore und Reconnect: ausstehende Queue-Einträge zuerst senden, dann Server-State laden
 
-**Konfliktauflösung:** Sets sind nach Sync **unveränderlich**. Sync-Modell: **idempotenter Append per UUID** — Server akzeptiert ersten Write, ignoriert Duplikate mit bekannter UUID. Kein "Server gewinnt"-Szenario, da der Server bei laufenden Trainings typischerweise noch keine Daten hat. Zwei-Geräte-Gleichzeitigkeit: dokumentiertes v1-Limit, kein Handling nötig.
+**Konfliktauflösung:** Sets sind nach Sync **unveränderlich**. Sync-Modell: **idempotenter Append per UUID** — Server akzeptiert ersten Write, ignoriert Duplikate mit bekannter UUID. Workout-Abschluss wird erst nach erfolgreichem Set-Replay verarbeitet. Unsupported Mutationen bleiben online-only. Zwei-Geräte-Gleichzeitigkeit: dokumentiertes v1-Limit, kein Handling nötig.
 
 **Phase-Abgrenzung:**
 
-- **MVP:** Queue als Transport-Buffer + UUID-Idempotenz. Kein Last-Sync-Timestamp im UI.
-- **Phase 3 (#33):** Erweiterter Konfliktresolution für Mehrgeräte-Szenarien. Last-Sync-Zeitstempel sichtbar im UI. Toast-Benachrichtigung bei Konflikten (nie während aktivem Training).
+- **MVP:** User-scoped Offline-Store, replay-before-refresh, queued Sets, queued Workout-Abschluss, minimaler Sync-Status im UI.
+- **Phase 3 (#33):** Erweiterte Konfliktauflösung für Mehrgeräte-Szenarien. Mehr Diagnose-/Recovery-Hinweise und detailliertere Sync-Ansichten.
 
 **iOS-Besonderheiten:**
 
@@ -1053,6 +1056,7 @@ Alle Daten (Template + Exercises + Tags + Bilder-URLs) in einem Datenbankaufruf 
 - Kein Background Sync → Foreground-Only via Queue. Die Queue ist ein **Transport-Buffer, kein dauerhafter Speicher** — aggressiver Flush nach jedem Set schützt gegen Datenverlust.
 - **7-Tage-Eviction (Normalzustand, kein Bug):** Safari löscht alle PWA-Storage nach 7 Tagen ohne Nutzerinteraktion — kein Warning, kein Event. App ist darauf ausgelegt: Sentinel-Check greift, Server-Resync stellt Zustand wieder her.
 - **Storage-Druck:** Safari kann IndexedDB ohne Warnung löschen. `Dexie.open()` wrappen und `QuotaExceededError` explizit abfangen.
+- **Storage-Recovery:** Fehlende Sentinel- oder IndexedDB-Daten führen in einen klaren Recovery-Modus statt zu stillen Cache-Fallbacks.
 - **iOS-15.4-Bug:** IndexedDB-Datenverlust bei App-Update (behoben in 15.4.1) — Zwei-Phasen-Sentinel-Check beim App-Start:
   - Erster App-Start: `sentinel_pending` schreiben
   - Nach abgeschlossenem Sync: `sentinel_ok` schreiben
@@ -1063,17 +1067,18 @@ Alle Daten (Template + Exercises + Tags + Bilder-URLs) in einem Datenbankaufruf 
 **Service Worker Update-Strategie:**
 
 - Neuer SW verfügbar → Toast außerhalb des Trainings ("Update verfügbar")
-- Während aktivem Training: `workout_active = true` in `sync_meta` → `skipWaiting()` zurückhalten. Nach Training-Ende: `skipWaiting()` aufrufen + Reload. Das Flag kontrolliert den Zeitpunkt von `skipWaiting()`, nicht den SW selbst.
-- `/api/v1/` Prefix schützt Stale-SW vor Breaking-API-Changes
+- Während aktivem oder resumablem Workout: `workout_active = true` in `sync_meta` → `skipWaiting()` zurückhalten. Nach Terminal-Path oder erfolgreichem Replay: `skipWaiting()` aufrufen + Reload. Das Flag kontrolliert den Zeitpunkt von `skipWaiting()`, nicht den SW selbst.
+- `/api/v1/`-Runtime-Caching bleibt auf explizit sichere Endpunkte beschränkt; Workout-/Auth-Reads laufen über den Dexie-Offline-Store.
 
 **`workout_active`-Flag — alle Abbruch-Pfade:**
 
-`workout_active` muss in **jedem** Abbruch-Pfad auf `false` gesetzt werden — sonst blockiert das Flag dauerhaft alle SW-Updates:
+`workout_active` muss in **jedem** Terminal- oder Abbruch-Pfad auf `false` gesetzt werden — sonst blockiert das Flag dauerhaft alle SW-Updates:
 
 | Abbruch-Pfad | Trigger | Flag-Reset |
 | --- | --- | --- |
 | Kein Set aufgezeichnet | User verlässt Screen sofort | `workout_active = false` beim Verlassen ohne Daten |
 | Manueller Abbruch | User bestätigt Dialog "Training abbrechen" | `workout_active = false` vor Redirect |
+| Completion replay bestätigt | Completion-Op erfolgreich synchronisiert | `workout_active = false` vor dem Redirect |
 | 24h-Timeout | Max-Age überschritten beim nächsten App-Start | `workout_active = false` + Toast |
 
 **App-Start-Validierung:** Beim App-Start prüfen: `workout_active === true` aber kein aktiver Server-Session-Eintrag → `workout_active = false` zwangsweise resetten. Verhindert permanente SW-Update-Blockierung nach unerwartetem Absturz.
