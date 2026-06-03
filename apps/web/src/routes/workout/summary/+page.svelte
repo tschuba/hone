@@ -5,10 +5,7 @@ import { onMount, tick } from "svelte";
 import { type ActiveWorkout, api } from "$lib/api";
 import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
 import { useWorkoutSession } from "$lib/context/workout-session.svelte.ts";
-import {
-  completeWorkoutWithOfflineFallback,
-  getTodayWorkout,
-} from "$lib/sync";
+import { completeWorkoutWithOfflineFallback, getTodayWorkout } from "$lib/sync";
 
 const workoutSession = useWorkoutSession();
 
