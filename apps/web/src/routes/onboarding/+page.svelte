@@ -315,27 +315,31 @@ async function completeOnboarding() {
   <title>Onboarding | Hone</title>
 </svelte:head>
 
-<main style="padding: calc(var(--safe-top) + var(--space-6)) var(--space-4) calc(var(--safe-bottom) + var(--space-6));">
+<main style="min-height: 100dvh; display: grid; place-items: start center; padding: calc(var(--safe-top) + var(--space-6)) var(--space-4) calc(var(--safe-bottom) + var(--space-6));">
   <section
-    style="max-width: 52rem; margin: 0 auto; padding: var(--space-6); background: var(--color-surface-card); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); display: grid; gap: var(--space-6);"
+    style="max-width: 52rem; width: 100%; padding: var(--space-6); background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 100%); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-lg); display: grid; gap: var(--space-6);"
   >
     <div style="display: grid; gap: var(--space-2);">
-      <p style="margin: 0; color: var(--color-accent); font-weight: 600;">Sprint 3</p>
-      <h1 style="margin: 0; font-size: clamp(2rem, 6vw, 3rem); line-height: 1.05;">Profile and equipment onboarding</h1>
+      <p style="margin: 0; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">Hone</p>
+      <h1 style="margin: 0; font-size: clamp(1.5rem, 5vw, 2rem); font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em; line-height: 1.05;">Profile Setup</h1>
       <p style="margin: 0; color: var(--color-text-secondary); line-height: 1.6; max-width: 40rem;">
         Set your training goals, equipment, and joint-friendly preferences. Progress saves locally on every change.
       </p>
     </div>
 
-    <nav aria-label="Onboarding progress" style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
-      {#each STEP_ORDER as progressStep, index}
-        <span
-          aria-current={step === progressStep ? "step" : undefined}
-          style={`display: inline-flex; align-items: center; justify-content: center; min-width: 2.25rem; padding: 0.55rem 0.8rem; border-radius: 999px; border: 1px solid ${step === progressStep ? "rgba(252, 211, 77, 0.55)" : "var(--color-border-subtle)"}; background: ${step === progressStep ? "rgba(252, 211, 77, 0.14)" : "rgba(255,255,255,0.03)"}; font-weight: 700;`}
-        >
-          {index + 1}
-        </span>
-      {/each}
+    <!-- Step progress: task 6.1 -->
+    <nav aria-label="Onboarding progress" style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">
+        Step {STEP_ORDER.indexOf(step) + 1} of {STEP_ORDER.length}
+      </span>
+      <div style="display: flex; gap: 4px;">
+        {#each STEP_ORDER as progressStep, index}
+          <div
+            aria-current={step === progressStep ? "step" : undefined}
+            style={`width: 20px; height: 3px; border-radius: 2px; background: ${index <= STEP_ORDER.indexOf(step) ? "var(--color-accent)" : "rgba(255,255,255,0.1)"};`}
+          ></div>
+        {/each}
+      </div>
     </nav>
 
     {#if isLoading}
@@ -344,7 +348,9 @@ async function completeOnboarding() {
       <div style="display: grid; gap: var(--space-5);">
         {#if step === "welcome"}
           <div style="display: grid; gap: var(--space-3);">
-            <h2 style="margin: 0;">Welcome</h2>
+            <!-- task 6.2 -->
+            <p style="margin: 0; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">Get Started</p>
+            <h2 style="margin: 0; font-size: 22px; font-weight: var(--font-weight-display); letter-spacing: -0.5px; text-transform: uppercase;">Welcome to Hone</h2>
             <p style="margin: 0; color: var(--color-text-secondary);">
               This setup should take under two minutes. You can come back later and change everything.
             </p>
@@ -353,20 +359,28 @@ async function completeOnboarding() {
 
         {#if step === "goals"}
           <fieldset style="display: grid; gap: var(--space-3); border: 0; padding: 0; margin: 0;">
-            <legend style="font-weight: 700; margin-bottom: var(--space-2);">What do you want from training?</legend>
+            <!-- task 6.2 -->
+            <p style="margin: 0; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">Your Goals</p>
+            <legend style="padding: 0; font-size: 22px; font-weight: var(--font-weight-display); letter-spacing: -0.5px; text-transform: uppercase; margin-bottom: var(--space-2); color: var(--color-text-primary);">What do you want from training?</legend>
             <p id="goals-help" style="margin: 0; color: var(--color-text-secondary);">
               Select one or more priorities. They will be stored on your profile.
             </p>
-            <div style="display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));">
+            <!-- task 6.3 + 6.4 -->
+            <div style="display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));">
               {#each GOAL_OPTIONS as goal}
-                <label style="display: flex; gap: 0.75rem; align-items: center; padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md);">
+                {@const selected = formData.goals.includes(goal)}
+                <label
+                  style={`display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; min-height: 44px; padding: var(--space-3) var(--space-4); border-radius: 10px; cursor: pointer; background: ${selected ? "rgba(252,211,77,0.08)" : "rgba(255,255,255,0.08)"}; border: 1px solid ${selected ? "rgba(252,211,77,0.3)" : "rgba(255,255,255,0.10)"};`}
+                >
                   <input
                     type="checkbox"
-                    checked={formData.goals.includes(goal)}
+                    checked={selected}
                     onchange={() => toggleGoal(goal)}
                     aria-describedby={stepError ? "goals-error" : "goals-help"}
+                    style="position: absolute; width: 1px; height: 1px; clip: rect(0 0 0 0); white-space: nowrap; overflow: hidden;"
                   />
-                  <span>{goal}</span>
+                  <span style={`font-size: 12px; font-weight: var(--font-weight-display); letter-spacing: 0.8px; text-transform: uppercase; color: ${selected ? "var(--color-text-primary)" : "var(--color-text-secondary)"};`}>{goal}</span>
+                  <span style={`flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; ${selected ? "background: var(--color-accent); border: 1.5px solid var(--color-accent);" : "border: 1.5px solid rgba(255,255,255,0.25); background: transparent;"}`}></span>
                 </label>
               {/each}
             </div>
@@ -375,8 +389,13 @@ async function completeOnboarding() {
 
         {#if step === "equipment"}
           <div style="display: grid; gap: var(--space-4);">
+            <!-- task 6.2 -->
+            <div>
+              <p style="margin: 0 0 8px; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">Your Equipment</p>
+              <h2 style="margin: 0; font-size: 22px; font-weight: var(--font-weight-display); letter-spacing: -0.5px; text-transform: uppercase; color: var(--color-text-primary);">What do you have access to?</h2>
+            </div>
             <label style="display: grid; gap: var(--space-2);">
-              <span style="font-weight: 700;">Equipment set name</span>
+              <span style="font-weight: 700; font-size: 12px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--color-text-secondary);">Equipment Set Name</span>
               <input
                 bind:value={formData.poolName}
                 aria-describedby={stepError ? "equipment-error" : undefined}
@@ -385,20 +404,26 @@ async function completeOnboarding() {
             </label>
 
             <fieldset style="display: grid; gap: var(--space-3); border: 0; padding: 0; margin: 0;">
-              <legend style="font-weight: 700; margin-bottom: var(--space-2);">Which equipment do you have?</legend>
+              <legend style="padding: 0; font-weight: 700; font-size: 12px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: var(--space-2);">Which equipment do you have?</legend>
               <p id="equipment-help" style="margin: 0; color: var(--color-text-secondary);">
                 Pick at least one option. You can add more pools later.
               </p>
-              <div style="display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));">
+              <!-- task 6.3 + 6.4 -->
+              <div style="display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));">
                 {#each EQUIPMENT_OPTIONS as option}
-                  <label style="display: flex; gap: 0.75rem; align-items: center; padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md);">
+                  {@const selected = formData.equipment.includes(option.value)}
+                  <label
+                    style={`display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; min-height: 44px; padding: var(--space-3) var(--space-4); border-radius: 10px; cursor: pointer; background: ${selected ? "rgba(252,211,77,0.08)" : "rgba(255,255,255,0.08)"}; border: 1px solid ${selected ? "rgba(252,211,77,0.3)" : "rgba(255,255,255,0.10)"};`}
+                  >
                     <input
                       type="checkbox"
-                      checked={formData.equipment.includes(option.value)}
+                      checked={selected}
                       onchange={() => toggleEquipment(option.value)}
                       aria-describedby={stepError ? "equipment-error" : "equipment-help"}
+                      style="position: absolute; width: 1px; height: 1px; clip: rect(0 0 0 0); white-space: nowrap; overflow: hidden;"
                     />
-                    <span>{option.label}</span>
+                    <span style={`font-size: 12px; font-weight: var(--font-weight-display); letter-spacing: 0.8px; text-transform: uppercase; color: ${selected ? "var(--color-text-primary)" : "var(--color-text-secondary)"};`}>{option.label}</span>
+                    <span style={`flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; ${selected ? "background: var(--color-accent); border: 1.5px solid var(--color-accent);" : "border: 1.5px solid rgba(255,255,255,0.25); background: transparent;"}`}></span>
                   </label>
                 {/each}
               </div>
@@ -408,28 +433,36 @@ async function completeOnboarding() {
 
         {#if step === "constraints"}
           <fieldset style="display: grid; gap: var(--space-3); border: 0; padding: 0; margin: 0;">
-            <legend style="font-weight: 700; margin-bottom: var(--space-2);">Constraints</legend>
+            <!-- task 6.2 -->
+            <p style="margin: 0; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">Preferences</p>
+            <legend style="padding: 0; font-size: 22px; font-weight: var(--font-weight-display); letter-spacing: -0.5px; text-transform: uppercase; color: var(--color-text-primary); margin-bottom: var(--space-2);">Any joint constraints?</legend>
             <p id="constraints-help" style="margin: 0; color: var(--color-text-secondary);">
               This Sprint 3 toggle is saved now and will activate exercise filtering in a later phase.
             </p>
-            <label style="display: flex; gap: 0.75rem; align-items: center; padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md);">
+            <label
+              style={`display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; min-height: 44px; padding: var(--space-3) var(--space-4); border-radius: 10px; cursor: pointer; background: ${formData.constraints.impactFilter ? "rgba(252,211,77,0.08)" : "rgba(255,255,255,0.08)"}; border: 1px solid ${formData.constraints.impactFilter ? "rgba(252,211,77,0.3)" : "rgba(255,255,255,0.10)"};`}
+            >
               <input
                 type="checkbox"
                 bind:checked={formData.constraints.impactFilter}
                 aria-describedby="constraints-help"
+                style="position: absolute; width: 1px; height: 1px; clip: rect(0 0 0 0); white-space: nowrap; overflow: hidden;"
               />
-              <span>Gelenkschonend (nur Low-Impact)</span>
+              <span style={`font-size: 12px; font-weight: var(--font-weight-display); letter-spacing: 0.8px; text-transform: uppercase; color: ${formData.constraints.impactFilter ? "var(--color-text-primary)" : "var(--color-text-secondary)"};`}>Gelenkschonend (Low-Impact)</span>
+              <span style={`flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; ${formData.constraints.impactFilter ? "background: var(--color-accent); border: 1.5px solid var(--color-accent);" : "border: 1.5px solid rgba(255,255,255,0.25); background: transparent;"}`}></span>
             </label>
           </fieldset>
         {/if}
 
         {#if step === "ready"}
           <div style="display: grid; gap: var(--space-3);">
-            <h2 style="margin: 0;">Ready to start</h2>
+            <!-- task 6.2 -->
+            <p style="margin: 0; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">Almost There</p>
+            <h2 style="margin: 0; font-size: 22px; font-weight: var(--font-weight-display); letter-spacing: -0.5px; text-transform: uppercase;">Ready to start</h2>
             <p style="margin: 0; color: var(--color-text-secondary);">
               Review your setup before saving.
             </p>
-            <div style="display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: rgba(255,255,255,0.03);">
+            <div style="display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); background: rgba(255,255,255,0.05);">
               <p style="margin: 0;"><strong>Goals:</strong> {formData.goals.join(", ") || "None selected"}</p>
               <p style="margin: 0;"><strong>Equipment set:</strong> {formData.poolName}</p>
               <p style="margin: 0;"><strong>Equipment:</strong> {formData.equipment.join(", ") || "None selected"}</p>
@@ -458,27 +491,29 @@ async function completeOnboarding() {
             type="button"
             onclick={previousStep}
             disabled={step === "welcome" || isSubmitting}
-            style="padding: 0.85rem 1rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700;"
+            style="padding: 0.85rem 1rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: transparent; color: inherit; font-weight: 700;"
           >
             Back
           </button>
 
           {#if step !== "ready"}
+            <!-- task 6.5 -->
             <button
               type="button"
               onclick={nextStep}
-              style="padding: 0.85rem 1rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700;"
+              style="padding: 14px 1.5rem; border: 0; border-radius: var(--radius-lg); background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #111; font-weight: var(--font-weight-display); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 20px rgba(252,211,77,0.25);"
             >
-              Next
+              Continue →
             </button>
           {:else}
+            <!-- task 6.5 -->
             <button
               type="button"
               onclick={completeOnboarding}
               disabled={isSubmitting}
-              style="padding: 0.85rem 1rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700;"
+              style="padding: 14px 1.5rem; border: 0; border-radius: var(--radius-lg); background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #111; font-weight: var(--font-weight-display); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 20px rgba(252,211,77,0.25);"
             >
-              {isSubmitting ? "Saving…" : "Finish onboarding"}
+              {isSubmitting ? "Saving…" : "Finish →"}
             </button>
           {/if}
         </div>

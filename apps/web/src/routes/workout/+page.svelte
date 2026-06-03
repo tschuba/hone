@@ -8,6 +8,7 @@ import {
   api,
 } from "$lib/api";
 import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
+import ExerciseRow from "$lib/components/ExerciseRow.svelte";
 import { useTimerState } from "$lib/context/timer-state.svelte.ts";
 import { useWorkoutSession } from "$lib/context/workout-session.svelte.ts";
 import { offlineStore } from "$lib/db/offline-store";
@@ -337,19 +338,39 @@ function formatTime(totalSeconds: number) {
   {announcement}
 </div>
 
-<main style="display: grid; gap: var(--space-4);">
+<main style="padding: calc(var(--safe-top) + var(--space-4)) var(--space-4) calc(var(--safe-bottom) + var(--space-4)); display: grid; gap: var(--space-4);">
   {#if errorMessage}
     <ErrorBoundary details={errorMessage} />
   {/if}
 
   {#if !todayWorkout}
-    <section style="padding: var(--space-6); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: rgba(255,255,255,0.03);">
-      <h1 id="heading-idle" tabindex="-1" style="margin: 0 0 var(--space-2);">Loading workout…</h1>
+    <section style="width: min(100%, 52rem); margin: 0 auto; padding: var(--space-6); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-lg); background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 100%);">
+      <h1 id="heading-idle" tabindex="-1" style="margin: 0 0 var(--space-2); font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em;">Loading workout…</h1>
       <p style="margin: 0; color: var(--color-text-secondary);">Preparing your active session.</p>
     </section>
   {:else if workoutSession.phase === "exercise" && currentExercise}
-    <section style="display: grid; gap: var(--space-4); padding: var(--space-6); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: rgba(255,255,255,0.03);">
-      <h1 id="heading-exercise" tabindex="-1" style="margin: 0;">{currentExercise.name}</h1>
+    <section style="width: min(100%, 52rem); margin: 0 auto; display: grid; gap: var(--space-4); padding: var(--space-6); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-lg); background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 100%);">
+      <!-- Progress indicator: task 4.1 + 4.2 -->
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--color-text-muted); font-size: 11px; font-weight: 600; letter-spacing: var(--letter-spacing-caps); text-transform: uppercase;">
+          Exercise {currentIndex + 1} of {todayWorkout.exercises.length}
+        </span>
+        <div style="display: flex; gap: 4px;">
+          {#each todayWorkout.exercises as _, i}
+            <div style={`width: 24px; height: 4px; border-radius: 2px; background: ${i <= currentIndex ? "var(--color-accent)" : "rgba(255,255,255,0.1)"};`}></div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Exercise name header: task 4.3 + 4.4 -->
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="width: 44px; height: 44px; flex-shrink: 0; background: rgba(252,211,77,0.15); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 1px solid rgba(252,211,77,0.2);">💪</div>
+        <div>
+          <h1 id="heading-exercise" tabindex="-1" style="margin: 0; font-size: 20px; font-weight: var(--font-weight-display); letter-spacing: 0.5px; text-transform: uppercase; color: var(--color-text-primary);">{currentExercise.name}</h1>
+          <p style="margin: 0; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Set {currentSetNumber} of {currentExercise.sets}</p>
+        </div>
+      </div>
+
       {#if currentExercise.imageUrl}
         <img
           src={currentExercise.imageUrl}
@@ -357,98 +378,133 @@ function formatTime(totalSeconds: number) {
           style="width: 100%; max-width: 28rem; border-radius: var(--radius-lg); border: 1px solid rgba(255,255,255,0.08);"
         />
       {/if}
-      <p style="margin: 0; color: var(--color-text-secondary);">
-        Set {currentSetNumber} of {currentExercise.sets}{#if currentExercise.reps} · {currentExercise.reps} reps{/if}{#if currentExercise.durationSecs} · {currentExercise.durationSecs}s{/if}
-      </p>
-      <p style="margin: 0; color: var(--color-text-secondary);">Rest after this exercise: {currentExercise.restSecs}s</p>
+
+      <!-- Target reps/weight: task 4.5 -->
+      <div style="padding-left: 58px;">
+        <p style="margin: 0 0 10px; color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;">Target</p>
+        <div style="display: flex; gap: 16px; align-items: flex-start;">
+          {#if currentExercise.reps}
+            <div>
+              <div style="color: var(--color-text-primary); font-size: 28px; font-weight: var(--font-weight-display); letter-spacing: -1px;">{currentExercise.reps}</div>
+              <div style="color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;">Reps</div>
+            </div>
+          {/if}
+          {#if currentExercise.durationSecs}
+            <div>
+              <div style="color: var(--color-text-primary); font-size: 28px; font-weight: var(--font-weight-display); letter-spacing: -1px;">{currentExercise.durationSecs}</div>
+              <div style="color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;">Sec</div>
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Completed sets log: task 4.6 -->
+      {#if currentExercise.completedSets > 0}
+        <div style="border-left: 3px solid rgba(252,211,77,0.3); padding-left: 12px;">
+          <p style="margin: 0 0 8px; color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;">Completed Sets</p>
+          {#each { length: currentExercise.completedSets } as _, i}
+            <p style="margin: 0 0 4px; color: var(--color-text-muted); font-size: 12px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;">
+              Set {i + 1}{#if currentExercise.reps} — {currentExercise.reps} Reps ✓{/if}{#if currentExercise.durationSecs} — {currentExercise.durationSecs}s ✓{/if}
+            </p>
+          {/each}
+        </div>
+      {/if}
+
       {#if currentExercise.substitutedForName}
-        <p style="margin: 0; color: var(--color-text-muted);">
+        <p style="margin: 0; color: var(--color-text-muted); font-size: 11px;">
           Substituted for {currentExercise.substitutedForName}
         </p>
       {/if}
-      <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
+
+      <!-- CTA buttons: Row 1 primary, Row 2 secondary -->
+      <div style="display: grid; gap: var(--space-3);">
         <button
           type="button"
           onclick={handleSetDone}
           disabled={isBusy}
-          style="padding: 0.95rem 1.2rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer;"
+          style="width: 100%; padding: 14px; border: 0; border-radius: var(--radius-lg); background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #111; font-weight: var(--font-weight-display); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 20px rgba(252,211,77,0.25);"
         >
-          {isBusy ? "Saving…" : "Set completed"}
+          {isBusy ? "Saving…" : "Log Set ✓"}
         </button>
-        <button
-          type="button"
-          onclick={handleToggleSubstitutions}
-          disabled={isLoadingSubstitutions || isSubstituting}
-          style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
-        >
-          {isLoadingSubstitutions
-            ? "Loading…"
-            : showSubstitutions
-              ? "Hide alternatives"
-              : "Swap exercise"}
-        </button>
-        <button
-          type="button"
-          onclick={handleAbandonWorkout}
-          disabled={isBusy}
-          style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: var(--color-text-secondary); font-weight: 700; cursor: pointer;"
-        >
-          Abandon workout
-        </button>
+        <div style="display: flex; gap: var(--space-3); justify-content: center;">
+          <button
+            type="button"
+            onclick={handleToggleSubstitutions}
+            disabled={isLoadingSubstitutions || isSubstituting}
+            style="padding: 10px 1.2rem; border: 1px solid rgba(255,255,255,0.10); border-radius: var(--radius-lg); background: transparent; color: inherit; font-weight: 600; font-size: 0.875rem; min-height: 44px; cursor: pointer;"
+          >
+            {isLoadingSubstitutions
+              ? "Loading…"
+              : showSubstitutions
+                ? "Hide alternatives"
+                : "Swap exercise"}
+          </button>
+          <button
+            type="button"
+            onclick={handleAbandonWorkout}
+            disabled={isBusy}
+            style="padding: 10px 1.2rem; border: 1px solid rgba(255,255,255,0.10); border-radius: var(--radius-lg); background: transparent; color: var(--color-text-muted); font-weight: 600; font-size: 0.875rem; min-height: 44px; cursor: pointer;"
+          >
+            Abandon workout
+          </button>
+        </div>
       </div>
 
+      <!-- Substitutions list: task 4.7 -->
       {#if showSubstitutions}
         <section style="display: grid; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);">
-          <h2 style="margin: 0; font-size: 1rem;">Suggested alternatives</h2>
+          <h2 style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: var(--letter-spacing-caps); text-transform: uppercase; color: var(--color-text-muted);">Suggested Alternatives</h2>
           {#if substitutions.length === 0}
             <p style="margin: 0; color: var(--color-text-secondary);">
               No close alternatives are available for this exercise.
             </p>
           {:else}
-            <ul style="display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none;">
+            <div style="display: grid; gap: var(--space-2);">
               {#each substitutions as substitution}
-                <li style="display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-md); background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);">
-                  <div style="display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between;">
-                    <div style="display: grid; gap: 0.2rem;">
-                      <strong>{substitution.name}</strong>
-                      <span style="color: var(--color-text-muted); font-size: 0.95rem;">
-                        {substitution.tags.join(" · ")}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onclick={() => handleSubstituteExercise(substitution.id)}
-                      disabled={isSubstituting}
-                      style="padding: 0.8rem 1rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer;"
-                    >
-                      {isSubstituting ? "Saving…" : "Use this"}
-                    </button>
+                <div style="display: flex; align-items: center; gap: var(--space-3); justify-content: space-between;">
+                  <div style="flex: 1; min-width: 0;">
+                    <ExerciseRow
+                      name={substitution.name}
+                      sets={currentExercise.sets}
+                      reps={currentExercise.reps ?? 0}
+                      weight="Bodyweight"
+                      icon="💪"
+                      active={false}
+                    />
                   </div>
-                </li>
+                  <button
+                    type="button"
+                    onclick={() => handleSubstituteExercise(substitution.id)}
+                    disabled={isSubstituting}
+                    style="flex-shrink: 0; padding: 0.8rem 1rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer; font-size: 12px;"
+                  >
+                    {isSubstituting ? "Saving…" : "Use this"}
+                  </button>
+                </div>
               {/each}
-            </ul>
+            </div>
           {/if}
         </section>
       {/if}
     </section>
   {:else if workoutSession.phase === "rest"}
-    <section style="display: grid; gap: var(--space-4); padding: var(--space-6); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: rgba(255,255,255,0.03);">
-      <h1 id="heading-rest" tabindex="-1" style="margin: 0;">Rest</h1>
+    <section style="width: min(100%, 52rem); margin: 0 auto; display: grid; gap: var(--space-4); padding: var(--space-6); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-lg); background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 100%);">
+      <h1 id="heading-rest" tabindex="-1" style="margin: 0; font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em;">Rest</h1>
       <time aria-label={`${restSecondsRemaining} seconds remaining`} style="font-size: clamp(2rem, 10vw, 4rem); font-weight: 800;">
         {formatTime(restSecondsRemaining)}
       </time>
-      <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
+      <div style="display: flex; gap: var(--space-3); justify-content: center;">
         <button
           type="button"
           onclick={moveToNextExercise}
-          style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
+          style="padding: 10px 1.5rem; border: 1px solid rgba(255,255,255,0.10); border-radius: var(--radius-lg); background: transparent; color: inherit; font-weight: 600; font-size: 0.875rem; min-height: 44px; cursor: pointer;"
         >
           Skip rest
         </button>
         <button
           type="button"
           onclick={handleAbandonWorkout}
-          style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: var(--color-text-secondary); font-weight: 700; cursor: pointer;"
+          style="padding: 10px 1.5rem; border: 1px solid rgba(255,255,255,0.10); border-radius: var(--radius-lg); background: transparent; color: var(--color-text-muted); font-weight: 600; font-size: 0.875rem; min-height: 44px; cursor: pointer;"
         >
           Abandon workout
         </button>
