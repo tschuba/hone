@@ -1,9 +1,4 @@
-import {
-  type ActiveWorkout,
-  type SetPayload,
-  type UserProfile,
-  api,
-} from "$lib/api";
+import { type ActiveWorkout, type SetPayload, api } from "$lib/api";
 import {
   type OfflineStore,
   type OfflineStoreHealthStatus,
@@ -24,6 +19,9 @@ type SyncApi = Pick<
   | "completeWorkoutSession"
   | "getActiveWorkout"
   | "logSet"
+  | "skipToday"
+  | "submitFeedback"
+  | "substituteExercise"
   | "updateProfile"
 >;
 
@@ -42,19 +40,22 @@ type SyncStore = Pick<
   | "listPendingOps"
   | "listPendingOpsCount"
   | "markWorkoutActive"
+  | "queueFeedback"
   | "queueOp"
+  | "queueSkipToday"
+  | "queueSubstitution"
   | "queueWorkoutCompletion"
   | "resetCurrentUserWorkoutState"
   | "setBlockedSyncReason"
   | "setLastSuccessfulReplayAt"
 >;
 
-type SetSyncPayload = {
-  sessionId: string;
-  set: SetPayload;
-};
+type SubstituteResult = Awaited<ReturnType<typeof api.substituteExercise>>;
 
 type PendingSyncResult = { status: "queued" } | { status: "synced" };
+type SubstituteSyncResult =
+  | { status: "queued" }
+  | { status: "synced"; replacement: SubstituteResult };
 type SyncReplayResult = {
   blockedReason?: SyncBlockedReason;
   lastSuccessfulReplayAt?: string;
@@ -101,30 +102,6 @@ export async function getSyncStatus(
   };
 }
 
-function isSetSyncPayload(payload: unknown): payload is SetSyncPayload {
-  if (typeof payload !== "object" || payload === null) {
-    return false;
-  }
-
-  const candidate = payload as {
-    sessionId?: unknown;
-    set?: {
-      exerciseLogId?: unknown;
-      setNr?: unknown;
-      uuid?: unknown;
-    } | null;
-  };
-
-  return (
-    typeof candidate.sessionId === "string" &&
-    typeof candidate.set === "object" &&
-    candidate.set !== null &&
-    typeof candidate.set.exerciseLogId === "string" &&
-    typeof candidate.set.setNr === "number" &&
-    typeof candidate.set.uuid === "string"
-  );
-}
-
 async function cacheTodayWorkout(
   workout: ActiveWorkout,
   store: SyncStore = offlineStore,
@@ -137,38 +114,66 @@ async function flushOp(
   client: SyncApi,
   store: SyncStore,
 ): Promise<{ terminal: boolean }> {
-  if (op.entityType === "set" && op.operation === "create") {
-    if (!isSetSyncPayload(op.payload)) {
-      throw new Error("Invalid queued set payload");
+  switch (op.entityType) {
+    case "set": {
+      await client.logSet(op.payload.sessionId, op.payload.set);
+      await store.applyQueuedSetToCachedWorkout(
+        op.payload.set.exerciseLogId,
+        op.userId,
+      );
+      return { terminal: false };
     }
 
-    await client.logSet(op.payload.sessionId, op.payload.set);
-    await store.applyQueuedSetToCachedWorkout(
-      op.payload.set.exerciseLogId,
-      op.userId,
-    );
-    return { terminal: false };
-  }
+    case "workout": {
+      if (op.operation === "complete") {
+        await client.completeWorkoutSession(op.payload.sessionId);
+        return { terminal: true };
+      }
 
-  if (op.entityType === "workout" && op.operation === "complete") {
-    const sessionId = op.payload.sessionId;
+      try {
+        await client.skipToday(op.payload.mesocyclusId);
+      } catch (error) {
+        const status = getErrorStatus(error);
 
-    if (typeof sessionId !== "string") {
-      throw new Error("Invalid queued workout completion payload");
+        if (status === 404 || status === 409) {
+          return { terminal: false };
+        }
+        throw error;
+      }
+      return { terminal: false };
     }
 
-    await client.completeWorkoutSession(sessionId);
-    return { terminal: true };
-  }
+    case "feedback": {
+      try {
+        await client.submitFeedback(op.payload);
+      } catch (error) {
+        if (getErrorStatus(error) === 409) {
+          return { terminal: false };
+        }
+        throw error;
+      }
+      return { terminal: false };
+    }
 
-  if (op.entityType === "profile" && op.operation === "update") {
-    await client.updateProfile(op.payload as unknown as UserProfile);
-    return { terminal: false };
-  }
+    case "substitution": {
+      await client.substituteExercise(
+        op.payload.sessionId,
+        op.payload.exerciseLogId,
+        op.payload.exerciseId,
+      );
+      return { terminal: false };
+    }
 
-  throw new Error(
-    `Unsupported pending operation: ${op.entityType}:${op.operation}`,
-  );
+    case "profile": {
+      await client.updateProfile(op.payload);
+      return { terminal: false };
+    }
+
+    default: {
+      const _: never = op;
+      throw new Error(`Unsupported pending operation`);
+    }
+  }
 }
 
 function getBlockedReasonFromError(error: unknown): SyncBlockedReason {
@@ -203,10 +208,16 @@ async function replayPendingOpsOnce(
   }
 
   const orderedOps = [
+    ...ops.filter((op) => op.entityType === "substitution"),
     ...ops.filter((op) => op.entityType === "set"),
-    ...ops.filter((op) => op.entityType === "workout"),
     ...ops.filter(
-      (op) => op.entityType !== "set" && op.entityType !== "workout",
+      (op) => op.entityType === "workout" && op.operation === "complete",
+    ),
+    ...ops.filter(
+      (op) =>
+        op.entityType !== "substitution" &&
+        op.entityType !== "set" &&
+        !(op.entityType === "workout" && op.operation === "complete"),
     ),
   ];
 
@@ -314,7 +325,7 @@ export async function getTodayWorkout(
           replayResult.blockedReason === "reauthentication"
             ? "Please sign in again before we continue syncing your workout."
             : "Workout sync is blocked until the conflict is resolved.",
-          replayResult.blockedReason,
+          replayResult.blockedReason!,
         );
       }
     }
@@ -404,6 +415,83 @@ export async function completeWorkoutWithOfflineFallback(
     await store.markWorkoutActive(true);
 
     return { status: "queued" as const };
+  }
+}
+
+export async function submitFeedbackWithOfflineFallback(
+  mesocyclusId: string,
+  difficulty: string,
+  variety: string,
+  options: {
+    client?: SyncApi;
+    store?: SyncStore;
+  } = {},
+): Promise<PendingSyncResult> {
+  const client = options.client ?? api;
+  const store = options.store ?? offlineStore;
+
+  try {
+    await client.submitFeedback({ difficulty, mesocyclusId, variety });
+    return { status: "synced" };
+  } catch (error) {
+    if (!isBackendUnavailableError(error)) {
+      throw error;
+    }
+
+    await store.queueFeedback(mesocyclusId, difficulty, variety);
+    return { status: "queued" };
+  }
+}
+
+export async function skipTodayWithOfflineFallback(
+  mesocyclusId: string,
+  options: {
+    client?: SyncApi;
+    store?: SyncStore;
+  } = {},
+): Promise<PendingSyncResult> {
+  const client = options.client ?? api;
+  const store = options.store ?? offlineStore;
+
+  try {
+    await client.skipToday(mesocyclusId);
+    return { status: "synced" };
+  } catch (error) {
+    if (!isBackendUnavailableError(error)) {
+      throw error;
+    }
+
+    await store.queueSkipToday(mesocyclusId);
+    return { status: "queued" };
+  }
+}
+
+export async function substituteExerciseWithOfflineFallback(
+  sessionId: string,
+  exerciseLogId: string,
+  exerciseId: string,
+  options: {
+    client?: SyncApi;
+    store?: SyncStore;
+  } = {},
+): Promise<SubstituteSyncResult> {
+  const client = options.client ?? api;
+  const store = options.store ?? offlineStore;
+
+  try {
+    const replacement = await client.substituteExercise(
+      sessionId,
+      exerciseLogId,
+      exerciseId,
+    );
+    return { replacement, status: "synced" };
+  } catch (error) {
+    if (!isBackendUnavailableError(error)) {
+      throw error;
+    }
+
+    await store.queueSubstitution(sessionId, exerciseLogId, exerciseId);
+    return { status: "queued" };
   }
 }
 

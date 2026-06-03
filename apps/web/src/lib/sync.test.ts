@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ActiveWorkout, SetPayload } from "$lib/api";
+import type { PendingOp } from "$lib/db/offline-store";
 
 import {
   completeWorkoutWithOfflineFallback,
   getTodayWorkout,
   logSetWithOfflineFallback,
+  substituteExerciseWithOfflineFallback,
   syncPendingOps,
 } from "./sync";
 
@@ -68,14 +70,58 @@ function createPendingWorkoutCompletion() {
   };
 }
 
-function createClient(
-  overrides: Partial<{
-    completeWorkoutSession(sessionId: string): Promise<unknown>;
-    getActiveWorkout(): Promise<ActiveWorkout>;
-    logSet(sessionId: string, set: SetPayload): Promise<unknown>;
-    updateProfile(): Promise<unknown>;
-  }> = {},
-) {
+function createPendingSubstitution(exerciseLogId: string): PendingOp {
+  return {
+    createdAt: new Date("2026-05-20T07:55:00.000Z"),
+    entityId: exerciseLogId,
+    entityType: "substitution",
+    id: 10,
+    operation: "create",
+    payload: {
+      exerciseId: "exercise-new",
+      exerciseLogId,
+      sessionId: "session-1",
+    },
+    retryCount: 0,
+    userId: "user-1",
+  };
+}
+
+function createPendingFeedback(mesocyclusId: string): PendingOp {
+  return {
+    createdAt: new Date("2026-05-20T09:00:00.000Z"),
+    entityId: mesocyclusId,
+    entityType: "feedback",
+    id: 20,
+    operation: "create",
+    payload: {
+      difficulty: "just_right",
+      mesocyclusId,
+      variety: "good",
+    },
+    retryCount: 0,
+    userId: "user-1",
+  };
+}
+
+function createPendingSkipToday(mesocyclusId: string): PendingOp {
+  return {
+    createdAt: new Date("2026-05-20T09:05:00.000Z"),
+    entityId: mesocyclusId,
+    entityType: "workout",
+    id: 30,
+    operation: "update",
+    payload: {
+      action: "skip_today",
+      mesocyclusId,
+    },
+    retryCount: 0,
+    userId: "user-1",
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createClient(overrides: Partial<Record<string, (...args: any[]) => Promise<any>>> = {}) {
   return {
     async completeWorkoutSession() {
       throw new Error("not used");
@@ -86,6 +132,15 @@ function createClient(
     async logSet() {
       throw new Error("not used");
     },
+    async skipToday() {
+      throw new Error("not used");
+    },
+    async submitFeedback() {
+      throw new Error("not used");
+    },
+    async substituteExercise() {
+      throw new Error("not used");
+    },
     async updateProfile() {
       throw new Error("not used");
     },
@@ -93,48 +148,8 @@ function createClient(
   };
 }
 
-function createStore(
-  overrides: Partial<{
-    applyQueuedSetToCachedWorkout(exerciseLogId: string, userId?: string): Promise<void>;
-    cacheActiveWorkout(data: ActiveWorkout, userId?: string): Promise<void>;
-    clearCurrentUserOfflineState(): Promise<void>;
-    deletePendingOp(id: number): Promise<void>;
-    getBlockedSyncReason(userId?: string): Promise<string | undefined>;
-    getCachedActiveWorkout(userId?: string): Promise<
-      | {
-          data: ActiveWorkout;
-          id: string;
-          updatedAt: Date;
-        }
-      | undefined
-    >;
-    getCachedAuthUserId(): Promise<{ key: string; value: string } | undefined>;
-    getLastSuccessfulReplayAt(userId?: string): Promise<string | undefined>;
-    getOfflineStoreHealth(): Promise<"healthy" | "initialized" | "recovery">;
-    getWorkoutActive(userId?: string): Promise<boolean>;
-    listPendingOps(userId?: string): Promise<
-      Array<{
-        createdAt: Date;
-        entityId: string;
-        entityType: "profile" | "set" | "workout";
-        id?: number;
-        operation: "complete" | "create" | "delete" | "update";
-        payload: Record<string, unknown>;
-        retryCount: number;
-        userId: string;
-      }>
-    >;
-    listPendingOpsCount(userId?: string): Promise<number>;
-    markWorkoutActive(value: boolean, userId?: string): Promise<void>;
-    queueOp(input: Record<string, unknown>, userId?: string): Promise<number>;
-    queueWorkoutCompletion(sessionId: string, userId?: string): Promise<number>;
-    resetCurrentUserWorkoutState(): Promise<void>;
-    setBlockedSyncReason(reason: string | null, userId?: string): Promise<void>;
-    setCachedAuthUserId(userId: string): Promise<void>;
-    setLastSuccessfulReplayAt(date: Date, userId?: string): Promise<void>;
-    updatePendingOpRetryCount(id: number, retryCount: number): Promise<void>;
-  }> = {},
-) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createStore(overrides: Partial<Record<string, (...args: any[]) => Promise<any>>> = {}) {
   return {
     async applyQueuedSetToCachedWorkout() {},
     async cacheActiveWorkout() {},
@@ -168,9 +183,14 @@ function createStore(
       return 0;
     },
     async markWorkoutActive() {},
+    async queueFeedback() {},
     async queueOp() {
       return 1;
     },
+    async queueSkipToday() {
+      return 4;
+    },
+    async queueSubstitution() {},
     async queueWorkoutCompletion() {
       return 2;
     },
@@ -593,5 +613,159 @@ describe("sync helpers", () => {
       reason: "reauthentication",
       status: 409,
     });
+  });
+
+  it("replays substitution ops before set ops", async () => {
+    const set: SetPayload = {
+      exerciseLogId: "exercise-log-1",
+      reps: 10,
+      setNr: 1,
+      uuid: "set-1",
+    };
+
+    const callOrder: string[] = [];
+
+    const result = await syncPendingOps({
+      client: createClient({
+        async substituteExercise() {
+          callOrder.push("substitute");
+          return {
+            exerciseId: "exercise-new",
+            exerciseLogId: "exercise-log-1",
+            imageAltText: "",
+            imageUrl: null,
+            name: "New Exercise",
+            substitutedForExerciseId: null,
+            substitutedForName: null,
+          };
+        },
+        async logSet() {
+          callOrder.push("logSet");
+        },
+        async getActiveWorkout() {
+          return createCachedWorkout();
+        },
+      }),
+      store: createStore({
+        async listPendingOps() {
+          return [
+            createPendingSubstitution("exercise-log-1"),
+            createPendingSet(set),
+          ];
+        },
+        async listPendingOpsCount() {
+          return 2;
+        },
+      }),
+    });
+
+    expect(result.status).toBe("synced");
+    expect(callOrder).toEqual(["substitute", "logSet"]);
+  });
+
+  it("treats a 409 on skip-today replay as a successful no-op", async () => {
+    const deletedIds: number[] = [];
+
+    const result = await syncPendingOps({
+      client: createClient({
+        async skipToday() {
+          throw { status: 409, title: "Duplicate" };
+        },
+      }),
+      store: createStore({
+        async listPendingOps() {
+          return [createPendingSkipToday("meso-1")];
+        },
+        async listPendingOpsCount() {
+          return 0;
+        },
+        async deletePendingOp(id) {
+          deletedIds.push(id);
+        },
+      }),
+    });
+
+    expect(result.status).toBe("synced");
+    expect(deletedIds).toContain(30);
+  });
+
+  it("treats a 404 on skip-today replay as a successful no-op (stale mesocyclus)", async () => {
+    const deletedIds: number[] = [];
+
+    const result = await syncPendingOps({
+      client: createClient({
+        async skipToday() {
+          throw { status: 404, title: "Mesocyclus not found" };
+        },
+      }),
+      store: createStore({
+        async listPendingOps() {
+          return [createPendingSkipToday("meso-stale")];
+        },
+        async listPendingOpsCount() {
+          return 0;
+        },
+        async deletePendingOp(id) {
+          deletedIds.push(id);
+        },
+      }),
+    });
+
+    expect(result.status).toBe("synced");
+    expect(deletedIds).toContain(30);
+  });
+
+  it("treats a 409 on feedback replay as a successful no-op", async () => {
+    const deletedIds: number[] = [];
+
+    const result = await syncPendingOps({
+      client: createClient({
+        async submitFeedback() {
+          throw { status: 409, title: "Duplicate" };
+        },
+      }),
+      store: createStore({
+        async listPendingOps() {
+          return [createPendingFeedback("meso-1")];
+        },
+        async listPendingOpsCount() {
+          return 0;
+        },
+        async deletePendingOp(id) {
+          deletedIds.push(id);
+        },
+      }),
+    });
+
+    expect(result.status).toBe("synced");
+    expect(deletedIds).toContain(20);
+  });
+
+  it("calls queueSubstitution when substituteExercise is called offline", async () => {
+    const queued: Array<{ exerciseId: string; exerciseLogId: string; sessionId: string }> =
+      [];
+
+    const result = await substituteExerciseWithOfflineFallback(
+      "session-1",
+      "exercise-log-1",
+      "exercise-new",
+      {
+        client: createClient({
+          async substituteExercise() {
+            throw new TypeError("Failed to fetch");
+          },
+        }),
+        store: createStore({
+          async queueSubstitution(sessionId, exerciseLogId, exerciseId) {
+            queued.push({ exerciseId, exerciseLogId, sessionId });
+          },
+        }),
+      },
+    );
+
+    expect(result.status).toBe("queued");
+    expect(queued).toEqual([
+      { exerciseId: "exercise-new", exerciseLogId: "exercise-log-1", sessionId: "session-1" },
+    ]);
   });
 });

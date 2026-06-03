@@ -22,6 +22,8 @@ Route handlers downstream of `getTodayWorkout` receive a `{ status: 409, reason:
 
 The server rejected the operation due to a business-logic conflict (e.g. session already completed, lock active, or an unprocessable payload). Replay stops immediately. The client writes `"conflict"` as the blocked-sync reason and returns `status: "blocked"` with `blockedReason: "conflict"`. No ops are deleted; manual resolution is expected.
 
+**Exception — benign duplicate for feedback and skip-today:** A `409` response for `entityType: "feedback"` or `entityType: "workout"` with `payload.action: "skip_today"` is treated as a successful no-op (op deleted, replay continues). Rationale: the server has already applied the action for this user and mesocycle; a duplicate submission should not permanently block the sync queue. This exception does not apply to `409` on set-create or workout-completion ops.
+
 #### Backend unavailable — `502`, `503`, `504`, or `TypeError("Failed to fetch" / "NetworkError" / "Load failed")`
 
 A transient infrastructure or network condition. Replay stops immediately. The client writes `"blocked"` as the blocked-sync reason and returns `status: "blocked"` with `blockedReason: "blocked"`. No ops are deleted. Replay will be retried on the next reconnect or app-focus event; a fresh `isBackendUnavailableError` check on retry will clear the block if the backend has recovered.
@@ -38,11 +40,14 @@ Detected before replay begins via `getOfflineStoreHealth()`. When the health che
 
 Within a single `replayPendingOpsOnce` call ops are processed in this order:
 
-1. Set-creation ops (`entityType: "set"`, `operation: "create"`), in the order they were queued (ascending `createdAt`)
-2. Workout-completion op (`entityType: "workout"`, `operation: "complete"`), if present
-3. All other ops (e.g. profile updates)
+1. Substitution ops (`entityType: "substitution"`, `operation: "create"`), in the order they were queued (ascending `createdAt`)
+2. Set-creation ops (`entityType: "set"`, `operation: "create"`), in the order they were queued (ascending `createdAt`)
+3. Workout-completion op (`entityType: "workout"`, `operation: "complete"`), if present
+4. All other ops (`entityType: "feedback"`, skip-today, profile updates)
 
-A completion op is never sent before all pending set ops have been flushed successfully. If a set op encounters a non-retriable error the completion op is never reached in that replay cycle.
+Substitution ops are ordered before set-create ops because a substitution creates a new `exerciseLogId` on the server that the corresponding set-create payloads reference. Replaying sets before the substitution would result in a 404 or 422 on the set ops.
+
+A completion op is never sent before all pending substitution and set ops have been flushed successfully. If any op in buckets 1–2 encounters a non-retriable error, the completion op is never reached in that replay cycle.
 
 ---
 

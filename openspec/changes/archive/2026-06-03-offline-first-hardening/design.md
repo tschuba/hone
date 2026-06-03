@@ -18,7 +18,9 @@ The architecture notes already describe richer behavior such as 24-hour expiry, 
 - Keep the offline MVP small enough to implement and validate with targeted tests.
 
 **Non-Goals:**
-- Full offline coverage for every mutation surface such as substitutions, profile edits, and plan management.
+
+- Full offline coverage for every mutation surface such as profile edits and plan management.
+- Offline support for start-session (server returns `sessionId` that downstream set-log ops depend on) and create-plan (triggers a background job; stacking multiple offline creates is a product risk).
 - Multi-device merge resolution beyond idempotent append semantics for the active session.
 - Rich operational analytics or background sync behavior that depends on unsupported iOS browser features.
 
@@ -36,11 +38,11 @@ The cached active workout will have explicit lifecycle rules: create from a conf
 
 Alternative considered: continuing to treat the cached active workout as a general fallback for dashboard and workout reads. Rejected because it blurs the difference between resuming an active session and showing current server state, which is the root of stale-session resurrection.
 
-3. Offline-safe write scope for MVP is queued set logging plus queued workout completion
+3. Offline-safe write scope covers set logging, workout completion, feedback submission, skip-today, and exercise substitution
 
-Set creation remains an idempotent append-by-client UUID. Workout completion becomes a second explicit queued operation so a user can finish offline without leaving the session half-closed. Other mutations such as substitutions and profile edits remain online-only until they have their own contract.
+Set creation remains an idempotent append-by-client UUID. Workout completion is an explicit queued operation so a user can finish offline. Feedback submission, skip-today, and exercise substitution are also queued: their payloads are stable at call time, they reference the mesocycle or session IDs already known client-side, and duplicate replays are safe (server treats them as no-ops). Other mutations such as profile edits and plan management remain online-only. Start-session and create-plan remain online-only: the former returns a `sessionId` that downstream set-log ops depend on, and the latter carries a product risk of stacking multiple offline job-creation requests.
 
-Alternative considered: keeping only queued set writes and requiring online completion. Rejected because it preserves one of the highest-impact failure modes the review surfaced.
+Alternative considered: keeping only queued set writes and requiring online completion and all other mutations. Rejected because feedback, skip, and substitution have the same stable-payload properties as set writes and leaving them blocked degrades the offline experience unnecessarily.
 
 4. Sync coordination moves behind a foreground replay barrier
 
@@ -65,6 +67,12 @@ Alternative considered: leaving these protections as architecture notes only. Re
 The UI will expose pending-op count, last successful replay timestamp, and blocked-sync reason where relevant. This is enough to support user trust and debugging without creating a full diagnostics console.
 
 Alternative considered: no new visibility until a later diagnostics change. Rejected because hidden queue state is a direct contributor to perceived fragility.
+
+8. `PendingOp` is a discriminated union, not a flat matrix
+
+The `PendingOp` type will be refactored from a flat `{ entityType, operation, payload: Record<string, unknown> }` shape to a discriminated union where each op variant carries a typed payload. The existing `flushOp()` if-chain becomes an exhaustive switch, so adding or removing an op type is a compile error if not handled. The `profile:update` branch already omits a runtime type guard under the old design — the union eliminates that class of bug entirely.
+
+Alternative considered: continuing to grow the flat matrix. Rejected because adding three new op types at once is the natural inflection point, and the cost of the refactor is contained to three files (`offline-store.ts`, `sync.ts`, `sync.test.ts`).
 
 ## Risks / Trade-offs
 

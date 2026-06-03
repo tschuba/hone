@@ -23,7 +23,7 @@ type FeedbackRouteOptions = {
 
 const defaultNotifier = {
   async notify(jobId: string) {
-    await prisma.$queryRaw`SELECT pg_notify('ai_job_created', ${jobId})`;
+    await prisma.$executeRaw`SELECT pg_notify('ai_job_created', ${jobId})`;
   },
 };
 
@@ -70,6 +70,10 @@ export function createFeedbackRoutes(options: FeedbackRouteOptions = {}) {
       return c.json({ jobId: job.id, ok: true }, 201);
     } catch (error) {
       if (error instanceof Error) {
+        if (error.message === "Cooldown active — try again later") {
+          return c.json({ status: 409, title: error.message }, 409);
+        }
+
         return c.json({ status: 400, title: error.message }, 400);
       }
 

@@ -1,6 +1,6 @@
 import Dexie, { type Table } from "dexie";
 
-import type { ActiveWorkout } from "$lib/api";
+import type { ActiveWorkout, SetPayload, UserProfile } from "$lib/api";
 import { createStorageRecoveryError } from "$lib/network-errors";
 
 const OFFLINE_STORE_VERSION = "2";
@@ -9,8 +9,6 @@ const OFFLINE_STORE_SENTINEL_KEY = "offline_store_sentinel";
 const LAST_SUCCESSFUL_REPLAY_META_KEY = "last_successful_replay_at";
 const BLOCKED_SYNC_REASON_META_KEY = "blocked_sync_reason";
 
-export type PendingEntityType = "profile" | "set" | "workout";
-export type PendingOperationKind = "complete" | "create" | "delete" | "update";
 export type OfflineStoreHealthStatus = "healthy" | "initialized" | "recovery";
 export type SyncBlockedReason =
   | "blocked"
@@ -18,16 +16,61 @@ export type SyncBlockedReason =
   | "reauthentication"
   | "storage";
 
-export type PendingOp = {
+type PendingOpBase = {
   createdAt: Date;
   entityId: string;
-  entityType: PendingEntityType;
   id?: number;
-  operation: PendingOperationKind;
-  payload: Record<string, unknown>;
   retryCount: number;
   userId: string;
 };
+
+type PendingSetCreateOp = PendingOpBase & {
+  entityType: "set";
+  operation: "create";
+  payload: { sessionId: string; set: SetPayload };
+};
+
+type PendingWorkoutCompleteOp = PendingOpBase & {
+  entityType: "workout";
+  operation: "complete";
+  payload: { sessionId: string };
+};
+
+type PendingWorkoutSkipOp = PendingOpBase & {
+  entityType: "workout";
+  operation: "update";
+  payload: { action: "skip_today"; mesocyclusId: string };
+};
+
+type PendingFeedbackCreateOp = PendingOpBase & {
+  entityType: "feedback";
+  operation: "create";
+  payload: { difficulty: string; mesocyclusId: string; variety: string };
+};
+
+type PendingSubstitutionCreateOp = PendingOpBase & {
+  entityType: "substitution";
+  operation: "create";
+  payload: { exerciseId: string; exerciseLogId: string; sessionId: string };
+};
+
+type PendingProfileUpdateOp = PendingOpBase & {
+  entityType: "profile";
+  operation: "update";
+  payload: UserProfile;
+};
+
+export type PendingOp =
+  | PendingSetCreateOp
+  | PendingWorkoutCompleteOp
+  | PendingWorkoutSkipOp
+  | PendingFeedbackCreateOp
+  | PendingSubstitutionCreateOp
+  | PendingProfileUpdateOp;
+
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
 
 export type CachedActiveWorkout = {
   data: ActiveWorkout;
@@ -304,13 +347,88 @@ export class OfflineStore extends Dexie {
     );
   }
 
-  async queueOp(input: Omit<PendingOp, "createdAt" | "id">, userId?: string) {
+  async queueFeedback(
+    mesocyclusId: string,
+    difficulty: string,
+    variety: string,
+    userId?: string,
+  ) {
+    const scope = await this.requireCurrentUserId(userId);
+
+    await this.transaction("rw", this.pendingOps, async () => {
+      await this.pendingOps
+        .where("entityId")
+        .equals(mesocyclusId)
+        .filter(
+          (op) => op.userId === scope && op.entityType === "feedback",
+        )
+        .delete();
+
+      await this.pendingOps.add({
+        createdAt: new Date(),
+        entityId: mesocyclusId,
+        entityType: "feedback",
+        operation: "create",
+        payload: { difficulty, mesocyclusId, variety },
+        retryCount: 0,
+        userId: scope,
+      });
+    });
+  }
+
+  async queueOp(
+    input: DistributiveOmit<PendingOp, "createdAt" | "id">,
+    userId?: string,
+  ) {
     const scope = await this.requireCurrentUserId(userId);
 
     return this.pendingOps.add({
       ...input,
       createdAt: new Date(),
       userId: scope,
+    } as PendingOp);
+  }
+
+  async queueSkipToday(mesocyclusId: string, userId?: string) {
+    const scope = await this.requireCurrentUserId(userId);
+
+    return this.pendingOps.add({
+      createdAt: new Date(),
+      entityId: mesocyclusId,
+      entityType: "workout",
+      operation: "update",
+      payload: { action: "skip_today", mesocyclusId },
+      retryCount: 0,
+      userId: scope,
+    });
+  }
+
+  async queueSubstitution(
+    sessionId: string,
+    exerciseLogId: string,
+    exerciseId: string,
+    userId?: string,
+  ) {
+    const scope = await this.requireCurrentUserId(userId);
+
+    await this.transaction("rw", this.pendingOps, async () => {
+      await this.pendingOps
+        .where("entityId")
+        .equals(exerciseLogId)
+        .filter(
+          (op) => op.userId === scope && op.entityType === "substitution",
+        )
+        .delete();
+
+      await this.pendingOps.add({
+        createdAt: new Date(),
+        entityId: exerciseLogId,
+        entityType: "substitution",
+        operation: "create",
+        payload: { exerciseId, exerciseLogId, sessionId },
+        retryCount: 0,
+        userId: scope,
+      });
     });
   }
 

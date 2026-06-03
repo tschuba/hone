@@ -173,7 +173,7 @@ const defaultStorage: PlanStorage = {
 
 const defaultNotifier = {
   async notify(jobId: string) {
-    await prisma.$queryRaw`SELECT pg_notify('ai_job_created', ${jobId})`;
+    await prisma.$executeRaw`SELECT pg_notify('ai_job_created', ${jobId})`;
   },
 };
 

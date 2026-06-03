@@ -49,7 +49,7 @@ The system SHALL support offline queuing for set logging and workout completion,
 - **THEN** the system SHALL queue workout completion for later replay and present the workout as pending sync rather than leaving it in an ambiguous active state
 
 #### Scenario: Unsupported workout mutations stay online-only
-- **WHEN** a user attempts an unsupported mutation such as exercise substitution while the backend is unavailable
+- **WHEN** a user attempts an unsupported mutation such as profile edit or plan creation while the backend is unavailable
 - **THEN** the system SHALL preserve existing queued workout data and SHALL present that mutation as unavailable offline instead of pretending it was queued
 
 ### Requirement: Pending operation outcomes are explicit
@@ -95,3 +95,44 @@ The system SHALL expose minimal sync state for the active workout experience.
 #### Scenario: Blocked replay communicates recovery state
 - **WHEN** replay is blocked by reauthentication, conflict, or storage recovery conditions
 - **THEN** the system SHALL display the blocked state and SHALL NOT imply that local data has already been synchronized
+
+### Requirement: Feedback submission can be queued offline
+The system SHALL queue feedback submission when the backend is unavailable and replay it on reconnect.
+
+#### Scenario: Feedback queues when offline
+- **WHEN** a user submits feedback while the backend is unavailable
+- **THEN** the system SHALL queue the op with `entityType: "feedback"` keyed on `mesocyclusId` and SHALL display a queued-success message instead of an error
+
+#### Scenario: Duplicate feedback replay is treated as success
+- **WHEN** a queued feedback op is replayed and the server returns 409 (duplicate submission for the same user and mesocycle)
+- **THEN** the system SHALL treat the response as a successful no-op, delete the queued op, and continue replay — it SHALL NOT enter a blocked-sync state
+
+### Requirement: Skip-today can be queued offline
+The system SHALL queue a skip-today action when the backend is unavailable and replay it on reconnect.
+
+#### Scenario: Skip-today queues when offline
+- **WHEN** a user skips today's workout while the backend is unavailable
+- **THEN** the system SHALL queue the op as `entityType: "workout"`, `operation: "update"`, `payload.action: "skip_today"` and SHALL immediately transition the dashboard to an empty state to prevent the action from being triggered again
+
+#### Scenario: loadDashboard is not called after offline skip
+- **WHEN** a skip-today op is queued offline
+- **THEN** the system SHALL NOT call `loadDashboard()` — the optimistic empty state persists until the next auth-triggered refresh
+
+#### Scenario: Duplicate skip replay is treated as success
+- **WHEN** a queued skip op is replayed and the server returns 409
+- **THEN** the system SHALL treat the response as a successful no-op and delete the queued op — it SHALL NOT enter a blocked-sync state
+
+### Requirement: Exercise substitution can be queued offline
+The system SHALL queue exercise substitution when the backend is unavailable and replay it before any dependent set-create ops.
+
+#### Scenario: Substitution queues when offline
+- **WHEN** a user substitutes an exercise while the backend is unavailable
+- **THEN** the system SHALL queue the op as `entityType: "substitution"` keyed on `exerciseLogId`, close the substitution panel immediately, and display a queued announcement
+
+#### Scenario: Only one substitution per exercise log entry is held in the queue
+- **WHEN** a user queues a substitution for an `exerciseLogId` that already has a pending substitution op
+- **THEN** the system SHALL replace the prior queued substitution with the new one atomically (single Dexie transaction) so at most one substitution per `exerciseLogId` is in the queue at any time
+
+#### Scenario: Substitution replays before its dependent set-create ops
+- **WHEN** a queued substitution op and queued set-create ops exist for the same session
+- **THEN** the system SHALL replay the substitution op before any set-create ops, because the substitution creates the `exerciseLogId` that the set-create payloads reference

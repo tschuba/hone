@@ -17,6 +17,7 @@ import {
   getTodayWorkout,
   isOfflineError,
   logSetWithOfflineFallback,
+  substituteExerciseWithOfflineFallback,
 } from "$lib/sync";
 
 const timerState = useTimerState();
@@ -299,20 +300,21 @@ async function handleSubstituteExercise(exerciseId: string) {
   errorMessage = null;
 
   try {
-    const replacement = await api.substituteExercise(
+    const result = await substituteExerciseWithOfflineFallback(
       todayWorkout.sessionId,
       currentExercise.exerciseLogId,
       exerciseId,
     );
-    announcement = `Exercise changed to ${replacement.name}.`;
-    await loadWorkout();
-  } catch (error) {
-    if (isOfflineError(error)) {
-      errorMessage =
-        "Exercise substitutions are unavailable offline. Reconnect to change this exercise.";
+
+    if (result.status === "queued") {
+      announcement = "Exercise substitution queued. It will sync when you reconnect.";
+      showSubstitutions = false;
       return;
     }
 
+    announcement = `Exercise changed to ${result.replacement.name}.`;
+    await loadWorkout();
+  } catch (error) {
     errorMessage = getErrorMessage(error, "Unable to substitute exercise.");
   } finally {
     isSubstituting = false;
