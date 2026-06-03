@@ -9,7 +9,15 @@ type Props = {
   done?: boolean;
 };
 
-const { name, sets, reps, weight, icon, active = false, done = false }: Props = $props();
+const {
+  name,
+  sets,
+  reps,
+  weight,
+  icon,
+  active = false,
+  done = false,
+}: Props = $props();
 </script>
 
 <div
