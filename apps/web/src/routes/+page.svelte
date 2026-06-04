@@ -4,6 +4,7 @@ import { goto } from "$app/navigation";
 import { onMount } from "svelte";
 
 import { type ActiveWorkout, type WorkoutHistoryItem, api } from "$lib/api";
+import ExerciseRow from "$lib/components/ExerciseRow.svelte";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
 import {
   getTodayWorkout,
@@ -273,41 +274,92 @@ function formatTimestamp(value: string | null) {
 }
 </script>
 
-<main style="padding: calc(var(--safe-top) + var(--space-6)) var(--space-4) calc(var(--safe-bottom) + var(--space-6));">
-  <section
-    style="max-width: 64rem; margin: 0 auto; padding: var(--space-6); background: var(--color-surface-card); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); display: grid; gap: var(--space-6);"
-  >
-    <div style="display: grid; gap: var(--space-2);">
-      <p style="margin: 0; color: var(--color-accent); font-weight: 600;">Hone MVP</p>
-      <h1 style="margin: 0; font-size: clamp(2rem, 7vw, 3.5rem); line-height: 1.05;">
-        Today&apos;s workout
-      </h1>
-      <p style="margin: 0; color: var(--color-text-secondary); line-height: 1.6; max-width: 42rem;">
-        Sign in to load the current plan, resume an active session, or start the next workout in your rotation.
-      </p>
-    </div>
+<main style="padding: calc(var(--safe-top) + var(--space-4)) var(--space-4) calc(var(--safe-bottom) + var(--space-6));">
+  <section style="max-width: 64rem; margin: 0 auto; display: grid; gap: var(--space-4);">
 
-    <div style="display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: center; justify-content: space-between; padding: var(--space-4); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: rgba(255,255,255,0.03);">
-      <div style="display: grid; gap: var(--space-2);">
-        <p style="margin: 0; color: var(--color-text-muted); font-size: 0.95rem;">Auth status</p>
-        {#if !authSession.isReady}
-          <p style="margin: 0; font-weight: 600;">Initializing session…</p>
-        {:else if authSession.isAuthenticated}
-          <p style="margin: 0; font-weight: 600;">
-            Signed in as {authSession.userId}{#if authSession.isUsingOfflineSession}
-              · offline cache
+    <!-- Unauthenticated: hero + login in a single focused card -->
+    {#if !authSession.isReady || !authSession.isAuthenticated}
+      <div style="max-width: 32rem; margin: 0 auto; width: 100%; padding: var(--space-6); background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 100%); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-lg); display: grid; gap: var(--space-5);">
+        <div style="display: grid; gap: var(--space-2);">
+          <p style="margin: 0; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">Hone</p>
+          <h1 style="margin: 0; font-size: clamp(1.75rem, 6vw, 2.5rem); font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em; line-height: 1.05;">
+            Today&apos;s workout
+          </h1>
+          <p style="margin: 0; color: var(--color-text-secondary); line-height: 1.6;">
+            {#if !authSession.isReady}
+              Initializing session…
+            {:else}
+              Sign in to load your plan and start training.
             {/if}
           </p>
+        </div>
+
+        {#if !authSession.isReady}
+          <!-- Loading state — no form yet -->
         {:else}
-          <p style="margin: 0; font-weight: 600;">Not signed in</p>
+          <div style="display: grid; gap: var(--space-4);">
+            <div style="display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));">
+              <label style="display: grid; gap: var(--space-2);">
+                <span style="color: var(--color-text-muted); font-size: 0.9rem;">Email</span>
+                <input
+                  type="email"
+                  bind:value={email}
+                  autocomplete="email"
+                  style="padding: 0.85rem 0.9rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: rgba(255,255,255,0.04); color: inherit;"
+                />
+              </label>
+
+              <label style="display: grid; gap: var(--space-2);">
+                <span style="color: var(--color-text-muted); font-size: 0.9rem;">Password</span>
+                <input
+                  type="password"
+                  bind:value={password}
+                  autocomplete="current-password"
+                  style="padding: 0.85rem 0.9rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: rgba(255,255,255,0.04); color: inherit;"
+                />
+              </label>
+            </div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
+              <button
+                type="button"
+                onclick={handleLogin}
+                disabled={authSession.isSubmitting}
+                style="padding: 14px 1.5rem; border: 0; border-radius: var(--radius-lg); background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #111; font-weight: var(--font-weight-display); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 20px rgba(252,211,77,0.25);"
+              >
+                {authSession.isSubmitting ? "Working…" : "Sign in →"}
+              </button>
+
+              <button
+                type="button"
+                onclick={handleRegister}
+                disabled={authSession.isSubmitting}
+                style="padding: 14px 1.5rem; border: 1px solid rgba(255,255,255,0.10); border-radius: var(--radius-lg); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
+              >
+                {authSession.isSubmitting ? "Working…" : "Create account"}
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        {#if authSession.error || screenError}
+          <p style="margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: rgba(248,113,113,0.14); border: 1px solid rgba(248,113,113,0.35); color: var(--color-error);">
+            {screenError ?? authSession.error}
+          </p>
         {/if}
       </div>
+    {/if}
 
-      {#if authSession.isAuthenticated}
+    <!-- Authenticated: minimal auth bar + workout/history grid -->
+    {#if authSession.isAuthenticated}
+      <div style="display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; padding: var(--space-2) 0;">
+        <p style="margin: 0; color: var(--color-text-muted); font-size: 0.9rem;">
+          {authSession.userId}{#if authSession.isUsingOfflineSession} · offline cache{/if}
+        </p>
         <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
           <a
             href="/onboarding"
-            style="display: inline-flex; width: fit-content; align-items: center; gap: 0.5rem; padding: 0.9rem 1.1rem; border-radius: var(--radius-md); background: rgba(255,255,255,0.04); border: 1px solid var(--color-border-subtle); text-decoration: none; font-weight: 700; color: inherit;"
+            style="display: inline-flex; align-items: center; padding: 0.6rem 1rem; border-radius: var(--radius-md); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); text-decoration: none; font-weight: 600; font-size: 0.875rem; color: inherit;"
           >
             Update onboarding
           </a>
@@ -315,141 +367,106 @@ function formatTimestamp(value: string | null) {
             type="button"
             onclick={handleLogout}
             disabled={authSession.isSubmitting}
-            style="padding: 0.8rem 1rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer;"
+            style="padding: 0.6rem 1rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; font-size: 0.875rem; cursor: pointer;"
           >
             {authSession.isSubmitting ? "Signing out…" : "Sign out"}
           </button>
         </div>
-      {/if}
-    </div>
-
-    {#if !authSession.isAuthenticated}
-      <div style="display: grid; gap: var(--space-4);">
-        <div style="display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));">
-          <label style="display: grid; gap: var(--space-2);">
-            <span style="color: var(--color-text-muted); font-size: 0.95rem;">Email</span>
-            <input
-              type="email"
-              bind:value={email}
-              autocomplete="email"
-              style="padding: 0.85rem 0.9rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: rgba(255,255,255,0.04); color: inherit;"
-            />
-          </label>
-
-          <label style="display: grid; gap: var(--space-2);">
-            <span style="color: var(--color-text-muted); font-size: 0.95rem;">Password</span>
-            <input
-              type="password"
-              bind:value={password}
-              autocomplete="current-password"
-              style="padding: 0.85rem 0.9rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: rgba(255,255,255,0.04); color: inherit;"
-            />
-          </label>
-        </div>
-
-        <div style="display: flex; flex-wrap: wrap; gap: var(--space-4);">
-          <button
-            type="button"
-            onclick={handleLogin}
-            disabled={authSession.isSubmitting || !authSession.isReady}
-            style="padding: 0.9rem 1.1rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer;"
-          >
-            {authSession.isSubmitting ? "Working…" : "Sign in"}
-          </button>
-
-          <button
-            type="button"
-            onclick={handleRegister}
-            disabled={authSession.isSubmitting || !authSession.isReady}
-            style="padding: 0.9rem 1.1rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
-          >
-            {authSession.isSubmitting ? "Working…" : "Create account"}
-          </button>
-        </div>
       </div>
-    {:else}
-      <div style="display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1.8fr) minmax(18rem, 1fr);">
-        <section style="display: grid; gap: var(--space-4); padding: 20px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: linear-gradient(180deg, rgba(252, 211, 77, 0.08), rgba(255,255,255,0.03));">
-          <div style="display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between;">
-            <div style="display: grid; gap: var(--space-2);">
-              <p style="margin: 0; color: var(--color-text-muted);">Today</p>
+
+      <div style="display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));">
+        <section style="display: grid; gap: var(--space-4); padding: 20px; border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-lg); background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 100%);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">
               {#if isLoadingWorkout}
-                <h2 style="margin: 0; font-size: 1.6rem;">Loading workout…</h2>
-              {:else if todayWorkout?.status === "active_session"}
-                <h2 style="margin: 0; font-size: 1.6rem;">Resume {todayWorkout.templateTitle ?? `Workout ${todayWorkout.templateLabel}`}</h2>
-              {:else if todayWorkout?.status === "planned"}
-                <h2 style="margin: 0; font-size: 1.6rem;">{todayWorkout.templateTitle ?? `Workout ${todayWorkout.templateLabel}`}</h2>
+                Loading…
+              {:else if todayWorkout?.status === "active_session" || todayWorkout?.status === "planned"}
+                Today · Strength
               {:else}
-                <h2 style="margin: 0; font-size: 1.6rem;">No active workout yet</h2>
+                Today
               {/if}
-            </div>
-
-            {#if todayWorkout && todayWorkout.status !== "empty"}
-              <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
-                <button
-                  type="button"
-                  onclick={handlePrimaryWorkoutAction}
-                  disabled={isStartingWorkout}
-                  style="padding: 0.95rem 1.2rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer;"
-                >
-                  {#if todayWorkout.status === "active_session"}
-                    Resume workout
-                  {:else}
-                    {isStartingWorkout ? "Starting…" : "Start workout"}
-                  {/if}
-                </button>
-
-                {#if todayWorkout.status === "planned"}
-                  <button
-                    type="button"
-                    onclick={handleSkipWorkout}
-                    disabled={isSkippingWorkout}
-                    style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
-                  >
-                    {isSkippingWorkout ? "Skipping…" : "Skip today"}
-                  </button>
-                {/if}
-              </div>
+            </span>
+            {#if todayWorkout && todayWorkout.status !== "empty" && !isLoadingWorkout}
+              <span style="background: rgba(252,211,77,0.12); color: var(--color-accent); padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; border: 1px solid rgba(252,211,77,0.2); letter-spacing: 1px; text-transform: uppercase;">
+                {todayWorkout.exercises.length} Exercises
+              </span>
             {/if}
           </div>
+
+          {#if isLoadingWorkout}
+            <h2 style="margin: 0; font-size: 1.5rem; font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em;">Loading workout…</h2>
+          {:else if todayWorkout?.status === "active_session"}
+            <div>
+              <h2 style="margin: 0 0 3px; font-size: 1.5rem; font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em;">{todayWorkout.templateTitle ?? `Workout ${todayWorkout.templateLabel}`}</h2>
+              <p style="margin: 0; color: var(--color-text-muted); font-size: 11px; font-weight: 600; letter-spacing: var(--letter-spacing-caps); text-transform: uppercase;">Resume · In Progress</p>
+            </div>
+          {:else if todayWorkout?.status === "planned"}
+            <div>
+              <h2 style="margin: 0 0 3px; font-size: 1.5rem; font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em;">{todayWorkout.templateTitle ?? `Workout ${todayWorkout.templateLabel}`}</h2>
+              <p style="margin: 0; color: var(--color-text-muted); font-size: 11px; font-weight: 600; letter-spacing: var(--letter-spacing-caps); text-transform: uppercase;">~45 Min · Moderate</p>
+            </div>
+          {:else}
+            <h2 style="margin: 0; font-size: 1.5rem; font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em;">No active workout yet</h2>
+          {/if}
 
           {#if todayWorkout?.status === "empty"}
             <p style="margin: 0; color: var(--color-text-secondary); line-height: 1.6;">
               There is no active mesocycle yet. Generate your first plan to populate today's workout.
             </p>
+            <button
+              type="button"
+              onclick={handleGeneratePlan}
+              disabled={isGeneratingPlan}
+              style="width: 100%; padding: 14px; border: 0; border-radius: var(--radius-lg); background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #111; font-weight: var(--font-weight-display); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 20px rgba(252,211,77,0.25);"
+            >
+              {isGeneratingPlan ? "Generating…" : "Generate plan"}
+            </button>
+          {:else if todayWorkout}
+            <div style="display: grid; gap: 6px;">
+              {#each todayWorkout.exercises as exercise, i}
+                <ExerciseRow
+                  name={exercise.name}
+                  sets={exercise.sets}
+                  reps={exercise.reps ?? 0}
+                  weight="Bodyweight"
+                  icon="💪"
+                  active={i === 0}
+                />
+              {/each}
+            </div>
+
             <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
               <button
                 type="button"
-                onclick={handleGeneratePlan}
-                disabled={isGeneratingPlan}
-                style="padding: 0.95rem 1.2rem; border: 0; border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text); font-weight: 700; cursor: pointer;"
+                onclick={handlePrimaryWorkoutAction}
+                disabled={isStartingWorkout}
+                style="flex: 1; padding: 14px; border: 0; border-radius: var(--radius-lg); background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #111; font-weight: var(--font-weight-display); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 20px rgba(252,211,77,0.25);"
               >
-                {isGeneratingPlan ? "Generating…" : "Generate plan"}
+                {#if todayWorkout.status === "active_session"}
+                  Resume workout →
+                {:else}
+                  {isStartingWorkout ? "Starting…" : "Start workout →"}
+                {/if}
               </button>
+
+              {#if todayWorkout.status === "planned"}
+                <button
+                  type="button"
+                  onclick={handleSkipWorkout}
+                  disabled={isSkippingWorkout}
+                  style="padding: 14px 1.2rem; border: 1px solid rgba(255,255,255,0.10); border-radius: var(--radius-lg); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
+                >
+                  {isSkippingWorkout ? "Skipping…" : "Skip today"}
+                </button>
+              {/if}
             </div>
-          {:else if todayWorkout}
-            <ol style="display: grid; gap: var(--space-3); margin: 0; padding-left: 1.25rem;">
-              {#each todayWorkout.exercises as exercise}
-                <li style="padding: var(--space-3); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); background: rgba(255,255,255,0.03);">
-                  <div style="display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: baseline; justify-content: space-between;">
-                    <strong>{exercise.name}</strong>
-                    <span style="color: var(--color-text-muted); font-size: 0.95rem;">
-                      {exercise.sets} sets{#if exercise.reps} · {exercise.reps} reps{/if}{#if exercise.durationSecs} · {exercise.durationSecs}s{/if}
-                    </span>
-                  </div>
-                  <p style="margin: 0.35rem 0 0; color: var(--color-text-secondary); font-size: 0.95rem;">
-                    Rest {exercise.restSecs}s{#if todayWorkout.status === "active_session"} · Completed sets {exercise.completedSets}{/if}
-                  </p>
-                </li>
-              {/each}
-            </ol>
           {/if}
         </section>
 
-        <aside style="display: grid; gap: var(--space-4); padding: 20px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: rgba(255,255,255,0.03);">
+        <aside style="display: grid; gap: var(--space-4); padding: 20px; border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-lg); background: rgba(255,255,255,0.05);">
           <div style="display: grid; gap: var(--space-2);">
-            <p style="margin: 0; color: var(--color-text-muted);">Recent sessions</p>
-            <h2 style="margin: 0; font-size: 1.25rem;">History</h2>
+            <p style="margin: 0; color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Recent sessions</p>
+            <h2 style="margin: 0; font-size: 1.25rem; font-weight: var(--font-weight-display);">History</h2>
           </div>
 
           {#if workoutHistory.length === 0}
@@ -457,9 +474,9 @@ function formatTimestamp(value: string | null) {
           {:else}
             <ul style="display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none;">
               {#each workoutHistory.slice(0, 5) as session}
-                <li style="padding: var(--space-3); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); background: rgba(255,255,255,0.02); display: grid; gap: 0.35rem;">
-                  <strong>{session.status}</strong>
-                  <span style="color: var(--color-text-secondary);">{formatTimestamp(session.completedAt)}</span>
+                <li style="padding: var(--space-3); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); background: rgba(255,255,255,0.03); display: grid; gap: 0.35rem;">
+                  <strong style="font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px;">{session.status}</strong>
+                  <span style="color: var(--color-text-secondary); font-size: 0.85rem;">{formatTimestamp(session.completedAt)}</span>
                 </li>
               {/each}
             </ul>
@@ -468,12 +485,12 @@ function formatTimestamp(value: string | null) {
           {#if todayWorkout && todayWorkout.status !== "empty" && todayWorkout.mesocyclusId}
             <section style="display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid rgba(255,255,255,0.08);">
               <div style="display: grid; gap: var(--space-2);">
-                <p style="margin: 0; color: var(--color-text-muted);">Weekly feedback</p>
+                <p style="margin: 0; color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Weekly feedback</p>
                 <h3 style="margin: 0; font-size: 1rem;">Adjust the next plan</h3>
               </div>
 
               <label style="display: grid; gap: var(--space-2);">
-                <span style="color: var(--color-text-muted); font-size: 0.95rem;">Difficulty</span>
+                <span style="color: var(--color-text-muted); font-size: 0.875rem;">Difficulty</span>
                 <select bind:value={feedbackDifficulty} style="padding: 0.85rem 0.9rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: rgba(255,255,255,0.04); color: inherit;">
                   <option value="too_easy">Too easy</option>
                   <option value="just_right">Just right</option>
@@ -482,7 +499,7 @@ function formatTimestamp(value: string | null) {
               </label>
 
               <label style="display: grid; gap: var(--space-2);">
-                <span style="color: var(--color-text-muted); font-size: 0.95rem;">Variety</span>
+                <span style="color: var(--color-text-muted); font-size: 0.875rem;">Variety</span>
                 <select bind:value={feedbackVariety} style="padding: 0.85rem 0.9rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: rgba(255,255,255,0.04); color: inherit;">
                   <option value="too_low">Need more variety</option>
                   <option value="good">Good balance</option>
@@ -494,7 +511,7 @@ function formatTimestamp(value: string | null) {
                 type="button"
                 onclick={handleFeedbackSubmit}
                 disabled={isSubmittingFeedback}
-                style="padding: 0.95rem 1.2rem; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
+                style="padding: 0.85rem 1.2rem; border: 1px solid rgba(255,255,255,0.10); border-radius: var(--radius-md); background: transparent; color: inherit; font-weight: 700; cursor: pointer;"
               >
                 {isSubmittingFeedback ? "Submitting…" : "Send feedback"}
               </button>
@@ -506,22 +523,18 @@ function formatTimestamp(value: string | null) {
           {/if}
         </aside>
       </div>
-    {/if}
 
-    {#if authSession.error || screenError}
-      <p
-        style="margin: 0; padding: var(--space-4); border-radius: var(--radius-md); background: rgba(248, 113, 113, 0.14); border: 1px solid rgba(248, 113, 113, 0.35); color: var(--color-error);"
-      >
-        {screenError ?? authSession.error}
-      </p>
-    {/if}
+      {#if authSession.error || screenError}
+        <p style="margin: 0; padding: var(--space-4); border-radius: var(--radius-md); background: rgba(248,113,113,0.14); border: 1px solid rgba(248,113,113,0.35); color: var(--color-error);">
+          {screenError ?? authSession.error}
+        </p>
+      {/if}
 
-    {#if planSuccess}
-      <p
-        style="margin: 0; padding: var(--space-4); border-radius: var(--radius-md); background: rgba(34, 197, 94, 0.14); border: 1px solid rgba(34, 197, 94, 0.35); color: var(--color-success);"
-      >
-        {planSuccess}
-      </p>
+      {#if planSuccess}
+        <p style="margin: 0; padding: var(--space-4); border-radius: var(--radius-md); background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.35); color: var(--color-success);">
+          {planSuccess}
+        </p>
+      {/if}
     {/if}
   </section>
 </main>
