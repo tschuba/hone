@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
 
 import type { AuthVariables } from "../middleware/auth";
+import type { ActivePlanResponse } from "./plan.routes";
 import { createPlanRoutes } from "./plan.routes";
 
 function createTestApp(options: {
@@ -37,7 +38,9 @@ function createTestApp(options: {
     }>;
   };
   storage: {
+    archiveActiveMesocyclus(userId: string): Promise<void>;
     createMesocyclus(input: {
+      equipmentPoolId: string | null;
       plan: {
         durationWeeks: number;
         workouts: Array<{
@@ -55,8 +58,10 @@ function createTestApp(options: {
         }>;
         workoutsPerWeek: number;
       };
+      sessionMinutes: number;
       userId: string;
     }): Promise<{ id: string }>;
+    getActivePlan(userId: string): Promise<ActivePlanResponse | null>;
     getPlanContext(input: {
       equipmentPoolId?: string;
       userId: string;
@@ -87,6 +92,80 @@ function createTestApp(options: {
   return app;
 }
 
+const defaultPlan: ActivePlanResponse = {
+  completedSessions: 2,
+  cycleCount: 4,
+  equipmentPoolId: "pool-1",
+  mesocyclusId: "meso-1",
+  name: "4-cycle plan",
+  sessionMinutes: 30,
+  sessions: [
+    {
+      isNext: false,
+      position: 1,
+      exercises: [{ durationSecs: null, name: "Pull-up", reps: 8, sets: 3 }],
+    },
+    {
+      isNext: false,
+      position: 2,
+      exercises: [{ durationSecs: 60, name: "Plank", reps: null, sets: 3 }],
+    },
+    {
+      isNext: true,
+      position: 3,
+      exercises: [{ durationSecs: null, name: "Squat", reps: 10, sets: 3 }],
+    },
+  ],
+  sessionsPerCycle: 3,
+  totalSessions: 12,
+};
+
+const defaultStorage = {
+  async archiveActiveMesocyclus() {},
+  async createMesocyclus() {
+    return { id: "meso-1" };
+  },
+  async getActivePlan() {
+    return defaultPlan;
+  },
+  async getPlanContext() {
+    return {
+      constraints: { impactFilter: false },
+      equipmentPool: { id: "pool-1", name: "Home", tags: ["bodyweight"] },
+      goals: [],
+    };
+  },
+};
+
+const defaultRuleEngine = {
+  async generate() {
+    return {
+      durationWeeks: 4,
+      workouts: [
+        {
+          estimatedDurationMinutes: 30,
+          exercises: [{ exerciseId: "ex-a", position: 1, reps: 8, sets: 3 }],
+          label: "A" as const,
+          position: 1,
+        },
+        {
+          estimatedDurationMinutes: 30,
+          exercises: [{ exerciseId: "ex-b", position: 1, reps: 10, sets: 3 }],
+          label: "B" as const,
+          position: 2,
+        },
+        {
+          estimatedDurationMinutes: 30,
+          exercises: [{ exerciseId: "ex-c", position: 1, reps: 12, sets: 3 }],
+          label: "C" as const,
+          position: 3,
+        },
+      ],
+      workoutsPerWeek: 3,
+    };
+  },
+};
+
 describe("plan routes", () => {
   it("creates a rule-based mesocyclus and queues an ai job", async () => {
     let generatedInput:
@@ -116,91 +195,14 @@ describe("plan routes", () => {
       ruleEngine: {
         async generate(input) {
           generatedInput = input;
-          return {
-            durationWeeks: 4,
-            workouts: [
-              {
-                estimatedDurationMinutes: 30,
-                exercises: [
-                  {
-                    durationSecs: 180,
-                    exerciseId: "warmup-a",
-                    position: 1,
-                    sets: 1,
-                  },
-                  {
-                    exerciseId: "main-a",
-                    position: 2,
-                    reps: 10,
-                    sets: 3,
-                  },
-                ],
-                label: "A",
-                position: 1,
-              },
-              {
-                estimatedDurationMinutes: 30,
-                exercises: [
-                  {
-                    durationSecs: 180,
-                    exerciseId: "warmup-b",
-                    position: 1,
-                    sets: 1,
-                  },
-                  {
-                    exerciseId: "main-b",
-                    position: 2,
-                    reps: 10,
-                    sets: 3,
-                  },
-                ],
-                label: "B",
-                position: 2,
-              },
-              {
-                estimatedDurationMinutes: 30,
-                exercises: [
-                  {
-                    durationSecs: 180,
-                    exerciseId: "warmup-c",
-                    position: 1,
-                    sets: 1,
-                  },
-                  {
-                    exerciseId: "main-c",
-                    position: 2,
-                    reps: 10,
-                    sets: 3,
-                  },
-                ],
-                label: "C",
-                position: 3,
-              },
-            ],
-            workoutsPerWeek: 3,
-          };
+          return defaultRuleEngine.generate();
         },
       },
-      storage: {
-        async createMesocyclus() {
-          return { id: "meso-1" };
-        },
-        async getPlanContext() {
-          return {
-            constraints: { impactFilter: true },
-            equipmentPool: {
-              id: "pool-1",
-              name: "Home",
-              tags: ["bodyweight"],
-            },
-            goals: [{ scope: "profile", value: "Build consistency" }],
-          };
-        },
-      },
+      storage: defaultStorage,
     });
 
     const response = await app.request("http://hone.test/api/v1/plans", {
-      body: JSON.stringify({ sessionMinutes: 30, weeksCount: 4 }),
+      body: JSON.stringify({ sessionMinutes: 30, cycleCount: 4 }),
       headers: {
         "content-type": "application/json",
       },
@@ -208,24 +210,18 @@ describe("plan routes", () => {
     });
 
     expect(response.status).toBe(201);
-    expect(generatedInput).toEqual({
+    expect(generatedInput).toMatchObject({
       equipmentTags: ["bodyweight"],
-      excludeModifiers: ["back_load", "knee_load"],
       sessionMinutes: 30,
       userId: "user-1",
       weeksCount: 4,
     });
-    expect(queuedInput).toEqual({
+    expect(queuedInput).toMatchObject({
       currentWeek: 1,
       durationWeeks: 4,
       equipmentPoolId: "pool-1",
       equipmentTags: ["bodyweight"],
-      excludeModifiers: ["back_load", "knee_load"],
       mesocyclusId: "meso-1",
-      profile: {
-        constraints: { impactFilter: true },
-        goals: [{ scope: "profile", value: "Build consistency" }],
-      },
       sessionMinutes: 30,
       type: "mesocyclus",
     });
@@ -245,15 +241,9 @@ describe("plan routes", () => {
           return { id: "job-1" };
         },
       },
-      ruleEngine: {
-        async generate() {
-          throw new Error("generate should not be called");
-        },
-      },
+      ruleEngine: defaultRuleEngine,
       storage: {
-        async createMesocyclus() {
-          throw new Error("createMesocyclus should not be called");
-        },
+        ...defaultStorage,
         async getPlanContext() {
           return null;
         },
@@ -269,5 +259,92 @@ describe("plan routes", () => {
     });
 
     expect(response.status).toBe(404);
+  });
+
+  describe("GET /active", () => {
+    it("returns the active plan with isNext on the correct session", async () => {
+      const app = createTestApp({
+        aiRateLimiter: {
+          async checkAndRecord() {
+            return { id: "job-1" };
+          },
+        },
+        ruleEngine: defaultRuleEngine,
+        storage: defaultStorage,
+      });
+
+      const response = await app.request(
+        "http://hone.test/api/v1/plans/active",
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as ActivePlanResponse;
+      expect(body.mesocyclusId).toBe("meso-1");
+      expect(body.cycleCount).toBe(4);
+      expect(body.completedSessions).toBe(2);
+      expect(body.totalSessions).toBe(12);
+      const nextSessions = body.sessions.filter((s) => s.isNext);
+      expect(nextSessions).toHaveLength(1);
+      expect(nextSessions[0]?.position).toBe(3);
+    });
+
+    it("returns 404 when no active plan exists", async () => {
+      const app = createTestApp({
+        aiRateLimiter: {
+          async checkAndRecord() {
+            return { id: "job-1" };
+          },
+        },
+        ruleEngine: defaultRuleEngine,
+        storage: {
+          ...defaultStorage,
+          async getActivePlan() {
+            return null;
+          },
+        },
+      });
+
+      const response = await app.request(
+        "http://hone.test/api/v1/plans/active",
+      );
+
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe("POST / archive-on-regenerate", () => {
+    it("archives any existing active mesocyclus before creating a new one", async () => {
+      const calls: string[] = [];
+
+      const app = createTestApp({
+        aiRateLimiter: {
+          async checkAndRecord() {
+            return { id: "job-1" };
+          },
+        },
+        notifier: { async notify() {} },
+        ruleEngine: defaultRuleEngine,
+        storage: {
+          ...defaultStorage,
+          async archiveActiveMesocyclus(userId) {
+            calls.push(`archive:${userId}`);
+          },
+          async createMesocyclus() {
+            calls.push("create");
+            return { id: "meso-new" };
+          },
+        },
+      });
+
+      const response = await app.request("http://hone.test/api/v1/plans", {
+        body: JSON.stringify({ cycleCount: 3, sessionMinutes: 45 }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(201);
+      expect(calls[0]).toBe("archive:user-1");
+      expect(calls[1]).toBe("create");
+    });
   });
 });

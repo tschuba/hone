@@ -89,11 +89,14 @@ That script currently does the following:
 - generates the Prisma client
 - runs the initial Prisma development migration
 
-After setup, start the apps with:
+Exercise data must be seeded separately after the API is running (see Quick Start above).
+
+After setup, start the apps and seed exercise data:
 
 ```bash
 bun run dev:api
 bun run dev:web
+bun run cli seed-exercises --fixture-only  # requires API to be running
 ```
 
 ## Manual Startup
@@ -112,6 +115,7 @@ Then run:
 ```bash
 bun run dev:api
 bun run dev:web
+bun run cli seed-exercises --fixture-only  # requires API to be running
 ```
 
 ## Useful Commands

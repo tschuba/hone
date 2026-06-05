@@ -86,6 +86,31 @@ type CreatePlanResponse = {
   status: "queued";
 };
 
+type ActivePlanExercise = {
+  durationSecs: number | null;
+  name: string;
+  reps: number | null;
+  sets: number;
+};
+
+type ActivePlanSession = {
+  exercises: ActivePlanExercise[];
+  isNext: boolean;
+  position: number;
+};
+
+type ActivePlan = {
+  completedSessions: number;
+  cycleCount: number;
+  equipmentPoolId: string | null;
+  mesocyclusId: string;
+  name: string;
+  sessionMinutes: number;
+  sessions: ActivePlanSession[];
+  sessionsPerCycle: number;
+  totalSessions: number;
+};
+
 type SetPayload = {
   durationSecs?: number;
   exerciseLogId: string;
@@ -207,14 +232,17 @@ export const api = {
     );
   },
   createPlan(input?: {
+    cycleCount?: number;
     equipmentPoolId?: string;
     sessionMinutes?: number;
-    weeksCount?: number;
   }) {
     return request<CreatePlanResponse>("/plans", {
       body: input ?? {},
       method: "POST",
     });
+  },
+  getActivePlan() {
+    return request<ActivePlan>("/plans/active");
   },
   getCurrentUser() {
     return request<AuthUser>("/auth/me");
@@ -329,6 +357,8 @@ export const api = {
 };
 
 export type {
+  ActivePlan,
+  ActivePlanSession,
   ActiveWorkout,
   ActiveWorkoutExercise,
   CreatePlanResponse,

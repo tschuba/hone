@@ -224,6 +224,8 @@ model Mesocyclus {
   planSource      PlanSource        @default(RULE_BASED) @map("plan_source")
   durationWeeks   Int               @default(4) @map("duration_weeks")
   workoutsPerWeek Int               @default(3) @map("workouts_per_week")
+  sessionMinutes  Int               @default(30) @map("session_minutes")
+  equipmentPoolId String?           @map("equipment_pool_id")
   nextTemplateId  String?           @map("next_template_id")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
