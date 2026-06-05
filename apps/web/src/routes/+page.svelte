@@ -3,7 +3,7 @@ import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
 import { onMount } from "svelte";
 
-import { type ActiveWorkout, type WorkoutHistoryItem, api } from "$lib/api";
+import { type ActiveWorkout, type EquipmentPool, type WorkoutHistoryItem, api } from "$lib/api";
 import ExerciseRow from "$lib/components/ExerciseRow.svelte";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
 import {
@@ -34,6 +34,7 @@ let feedbackVariety = $state("good");
 let feedbackSuccess = $state<string | null>(null);
 let todayWorkout = $state<ActiveWorkout | null>(null);
 let workoutHistory = $state<WorkoutHistoryItem[]>([]);
+let equipmentPools = $state<EquipmentPool[]>([]);
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (typeof error === "object" && error !== null && "title" in error) {
@@ -80,6 +81,7 @@ async function loadDashboard() {
   if (!authSession.isAuthenticated) {
     todayWorkout = null;
     workoutHistory = [];
+    equipmentPools = [];
     return;
   }
 
@@ -91,8 +93,12 @@ async function loadDashboard() {
     todayWorkout = await getTodayWorkout();
 
     try {
-      const history = await api.listWorkoutHistory();
+      const [history, pools] = await Promise.all([
+        api.listWorkoutHistory(),
+        api.listEquipmentPools(),
+      ]);
       workoutHistory = history.items;
+      equipmentPools = pools.items;
     } catch (error) {
       if (!isOfflineError(error)) {
         throw error;
@@ -185,8 +191,9 @@ async function handleGeneratePlan() {
 
   try {
     await api.createPlan({
+      cycleCount: 4,
+      equipmentPoolId: equipmentPools[0]?.id,
       sessionMinutes: 30,
-      weeksCount: 4,
     });
     planSuccess = "Plan created. Your first workout is ready.";
     await loadDashboard();
@@ -357,6 +364,12 @@ function formatTimestamp(value: string | null) {
           {authSession.userId}{#if authSession.isUsingOfflineSession} · offline cache{/if}
         </p>
         <div style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
+          <a
+            href="/plan"
+            style="display: inline-flex; align-items: center; padding: 0.6rem 1rem; border-radius: var(--radius-md); background: rgba(252,211,77,0.08); border: 1px solid rgba(252,211,77,0.20); text-decoration: none; font-weight: 600; font-size: 0.875rem; color: var(--color-accent);"
+          >
+            View plan →
+          </a>
           <a
             href="/onboarding"
             style="display: inline-flex; align-items: center; padding: 0.6rem 1rem; border-radius: var(--radius-md); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); text-decoration: none; font-weight: 600; font-size: 0.875rem; color: inherit;"

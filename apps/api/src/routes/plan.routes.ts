@@ -46,11 +46,40 @@ type PlanContext = {
   goals: ProfileGoal[];
 };
 
+type ActivePlanExercise = {
+  durationSecs: number | null;
+  name: string;
+  reps: number | null;
+  sets: number;
+};
+
+type ActivePlanSession = {
+  exercises: ActivePlanExercise[];
+  isNext: boolean;
+  position: number;
+};
+
+type ActivePlanResponse = {
+  completedSessions: number;
+  cycleCount: number;
+  equipmentPoolId: string | null;
+  mesocyclusId: string;
+  name: string;
+  sessionMinutes: number;
+  sessions: ActivePlanSession[];
+  sessionsPerCycle: number;
+  totalSessions: number;
+};
+
 type PlanStorage = {
+  archiveActiveMesocyclus(userId: string): Promise<void>;
   createMesocyclus(input: {
+    equipmentPoolId: string | null;
     plan: MesocyclusPlanInput;
+    sessionMinutes: number;
     userId: string;
   }): Promise<{ id: string }>;
+  getActivePlan(userId: string): Promise<ActivePlanResponse | null>;
   getPlanContext(input: {
     equipmentPoolId?: string;
     userId: string;
@@ -76,7 +105,84 @@ type PlanRouteOptions = {
   storage?: PlanStorage;
 };
 
+// Resolves which template position is "next" based on the stored nextTemplateId.
+// Falls back to position 1 when no sessions have been completed yet.
+function resolveNextPosition(
+  nextTemplateId: string | null,
+  templates: Array<{ id: string; position: number }>,
+): number {
+  if (!nextTemplateId) return 1;
+  return templates.find((t) => t.id === nextTemplateId)?.position ?? 1;
+}
+
 const defaultStorage: PlanStorage = {
+  async archiveActiveMesocyclus(userId) {
+    await prisma.mesocyclus.updateMany({
+      where: {
+        status: "ACTIVE",
+        userId,
+      },
+      data: {
+        status: "ARCHIVED",
+      },
+    });
+  },
+
+  async getActivePlan(userId) {
+    const mesocyclus = await prisma.mesocyclus.findFirst({
+      where: {
+        status: "ACTIVE",
+        userId,
+      },
+      include: {
+        templates: {
+          orderBy: { position: "asc" },
+          include: {
+            exercises: {
+              orderBy: { position: "asc" },
+              include: { exercise: true },
+            },
+          },
+        },
+        workoutSessions: {
+          where: { status: "COMPLETED" },
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!mesocyclus) return null;
+
+    const completedSessions = mesocyclus.workoutSessions.length;
+    const cycleCount = mesocyclus.durationWeeks;
+    const sessionsPerCycle = mesocyclus.templates.length;
+    const nextPosition = resolveNextPosition(
+      mesocyclus.nextTemplateId,
+      mesocyclus.templates,
+    );
+
+    return {
+      completedSessions,
+      cycleCount,
+      equipmentPoolId: mesocyclus.equipmentPoolId,
+      mesocyclusId: mesocyclus.id,
+      name: `${cycleCount}-cycle plan`,
+      sessionMinutes: mesocyclus.sessionMinutes,
+      sessionsPerCycle,
+      totalSessions: cycleCount * sessionsPerCycle,
+      sessions: mesocyclus.templates.map((template) => ({
+        isNext: template.position === nextPosition,
+        position: template.position,
+        exercises: template.exercises.map((te) => ({
+          durationSecs: te.durationSecs,
+          name: te.exercise.nameDe ?? te.exercise.nameEn,
+          reps: te.reps,
+          sets: te.sets,
+        })),
+      })),
+    };
+  },
+
   async getPlanContext({ equipmentPoolId, userId }) {
     const user = await prisma.user.findFirst({
       where: { id: userId },
@@ -139,11 +245,13 @@ const defaultStorage: PlanStorage = {
     };
   },
 
-  async createMesocyclus({ plan, userId }) {
+  async createMesocyclus({ equipmentPoolId, plan, sessionMinutes, userId }) {
     return prisma.mesocyclus.create({
       data: {
         durationWeeks: plan.durationWeeks,
+        equipmentPoolId,
         planSource: "RULE_BASED",
+        sessionMinutes,
         templates: {
           create: plan.workouts.map((workout) => ({
             label: workout.label,
@@ -195,11 +303,22 @@ export function createPlanRoutes(options: PlanRouteOptions = {}) {
 
   planRoutes.use("*", authGuard);
 
+  planRoutes.get("/active", async (c) => {
+    const userId = c.get("userId");
+    const plan = await storage.getActivePlan(userId);
+
+    if (!plan) {
+      return c.json({ status: 404, title: "No active plan" }, 404);
+    }
+
+    return c.json(plan, 200);
+  });
+
   planRoutes.post("/", async (c) => {
     const body = await c.req.json<{
+      cycleCount?: number;
       equipmentPoolId?: string;
       sessionMinutes?: number;
-      weeksCount?: number;
     }>();
 
     const userId = c.get("userId");
@@ -216,7 +335,7 @@ export function createPlanRoutes(options: PlanRouteOptions = {}) {
     }
 
     const sessionMinutes = parsePositiveInteger(body.sessionMinutes, 30);
-    const weeksCount = parsePositiveInteger(body.weeksCount, 4);
+    const cycleCount = parsePositiveInteger(body.cycleCount, 4);
     const excludeModifiers = context.constraints.impactFilter
       ? ["back_load", "knee_load"]
       : undefined;
@@ -226,16 +345,22 @@ export function createPlanRoutes(options: PlanRouteOptions = {}) {
       excludeModifiers,
       sessionMinutes,
       userId,
-      weeksCount,
+      weeksCount: cycleCount,
     };
     try {
+      await storage.archiveActiveMesocyclus(userId);
       const plan = await ruleEngine.generate(planOptions);
-      const mesocyclus = await storage.createMesocyclus({ plan, userId });
+      const mesocyclus = await storage.createMesocyclus({
+        equipmentPoolId: context.equipmentPool.id,
+        plan,
+        sessionMinutes,
+        userId,
+      });
       const job = await aiRateLimiter.checkAndRecord(
         userId,
         {
           currentWeek: 1,
-          durationWeeks: weeksCount,
+          durationWeeks: cycleCount,
           equipmentPoolId: context.equipmentPool.id,
           equipmentTags: context.equipmentPool.tags,
           excludeModifiers,
@@ -273,3 +398,5 @@ export function createPlanRoutes(options: PlanRouteOptions = {}) {
 
   return planRoutes;
 }
+
+export type { ActivePlanResponse, ActivePlanSession };

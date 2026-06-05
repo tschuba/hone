@@ -7,4 +7,9 @@ bun install
 bunx prisma generate --schema apps/api/prisma/schema.prisma
 bunx prisma migrate dev --schema apps/api/prisma/schema.prisma --name init
 
-echo "✓ Dev stack ready. Run: bun run dev:api and bun run dev:web"
+echo "✓ Dev stack ready."
+echo ""
+echo "Next steps:"
+echo "  1. bun run dev:api          # start the API"
+echo "  2. bun run dev:web          # start the web app"
+echo "  3. bun run cli seed-exercises --fixture-only  # seed exercise data (requires API running)"

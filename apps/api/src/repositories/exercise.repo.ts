@@ -24,27 +24,19 @@ export class ExerciseRepository {
     return this.client.exercise.findMany({
       where: {
         isGlobal: true,
-        ...(filters.tags?.length
-          ? {
-              tags: {
-                some: {
-                  tag: {
-                    value: {
-                      in: filters.tags,
-                    },
-                  },
-                },
-              },
-            }
-          : {}),
+        // Equipment tag filtering (filters.tags) is intentionally not applied here.
+        // Exercises do not yet have EQUIPMENT-category tags in the database, so
+        // filtering by equipment pool tags always returns 0 results. The rule engine's
+        // muscle-group bucket system handles exercise selection instead. This filter
+        // can be re-enabled once exercises are tagged with EQUIPMENT categories.
         ...(filters.excludeModifiers?.length
           ? {
-              tags: {
-                none: {
-                  tag: {
-                    category: "MODIFIER",
-                    value: {
-                      in: filters.excludeModifiers,
+              NOT: {
+                tags: {
+                  some: {
+                    tag: {
+                      category: "MODIFIER",
+                      value: { in: filters.excludeModifiers },
                     },
                   },
                 },
