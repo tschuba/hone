@@ -24,4 +24,4 @@
 
 - [x] 4.1 Test `GET /plans/active`: returns correct structure, `isNext` flag is accurate after varying numbers of completed sessions, returns 404 when no active plan.
 - [x] 4.2 Test `POST /plans` archive-on-regenerate: existing ACTIVE mesocyclus is set to ARCHIVED; new one is created; history is preserved.
-- [ ] 4.3 Manual check: generate a plan, open `/plan`, verify cycle grid and session templates display correctly; complete a session, reload, verify progress updates.
+- [x] 4.3 Manual check: generate a plan, open `/plan`, verify cycle grid and session templates display correctly; complete a session, reload, verify progress updates.

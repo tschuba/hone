@@ -108,16 +108,12 @@ const defaultPlan: ActivePlanResponse = {
     {
       isNext: false,
       position: 2,
-      exercises: [
-        { durationSecs: 60, name: "Plank", reps: null, sets: 3 },
-      ],
+      exercises: [{ durationSecs: 60, name: "Plank", reps: null, sets: 3 }],
     },
     {
       isNext: true,
       position: 3,
-      exercises: [
-        { durationSecs: null, name: "Squat", reps: 10, sets: 3 },
-      ],
+      exercises: [{ durationSecs: null, name: "Squat", reps: 10, sets: 3 }],
     },
   ],
   sessionsPerCycle: 3,
@@ -148,25 +144,19 @@ const defaultRuleEngine = {
       workouts: [
         {
           estimatedDurationMinutes: 30,
-          exercises: [
-            { exerciseId: "ex-a", position: 1, reps: 8, sets: 3 },
-          ],
+          exercises: [{ exerciseId: "ex-a", position: 1, reps: 8, sets: 3 }],
           label: "A" as const,
           position: 1,
         },
         {
           estimatedDurationMinutes: 30,
-          exercises: [
-            { exerciseId: "ex-b", position: 1, reps: 10, sets: 3 },
-          ],
+          exercises: [{ exerciseId: "ex-b", position: 1, reps: 10, sets: 3 }],
           label: "B" as const,
           position: 2,
         },
         {
           estimatedDurationMinutes: 30,
-          exercises: [
-            { exerciseId: "ex-c", position: 1, reps: 12, sets: 3 },
-          ],
+          exercises: [{ exerciseId: "ex-c", position: 1, reps: 12, sets: 3 }],
           label: "C" as const,
           position: 3,
         },
@@ -274,7 +264,11 @@ describe("plan routes", () => {
   describe("GET /active", () => {
     it("returns the active plan with isNext on the correct session", async () => {
       const app = createTestApp({
-        aiRateLimiter: { async checkAndRecord() { return { id: "job-1" }; } },
+        aiRateLimiter: {
+          async checkAndRecord() {
+            return { id: "job-1" };
+          },
+        },
         ruleEngine: defaultRuleEngine,
         storage: defaultStorage,
       });
@@ -296,7 +290,11 @@ describe("plan routes", () => {
 
     it("returns 404 when no active plan exists", async () => {
       const app = createTestApp({
-        aiRateLimiter: { async checkAndRecord() { return { id: "job-1" }; } },
+        aiRateLimiter: {
+          async checkAndRecord() {
+            return { id: "job-1" };
+          },
+        },
         ruleEngine: defaultRuleEngine,
         storage: {
           ...defaultStorage,
@@ -319,7 +317,11 @@ describe("plan routes", () => {
       const calls: string[] = [];
 
       const app = createTestApp({
-        aiRateLimiter: { async checkAndRecord() { return { id: "job-1" }; } },
+        aiRateLimiter: {
+          async checkAndRecord() {
+            return { id: "job-1" };
+          },
+        },
         notifier: { async notify() {} },
         ruleEngine: defaultRuleEngine,
         storage: {

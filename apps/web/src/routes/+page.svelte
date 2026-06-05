@@ -3,7 +3,12 @@ import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
 import { onMount } from "svelte";
 
-import { type ActiveWorkout, type EquipmentPool, type WorkoutHistoryItem, api } from "$lib/api";
+import {
+  type ActiveWorkout,
+  type EquipmentPool,
+  type WorkoutHistoryItem,
+  api,
+} from "$lib/api";
 import ExerciseRow from "$lib/components/ExerciseRow.svelte";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
 import {

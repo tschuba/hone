@@ -1,8 +1,8 @@
 <script lang="ts">
-import { onMount } from "svelte";
+import { goto } from "$app/navigation";
 import { type ActivePlan, type EquipmentPool, api } from "$lib/api";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
-import { goto } from "$app/navigation";
+import { onMount } from "svelte";
 
 const authSession = useAuthSession();
 
@@ -50,7 +50,10 @@ async function load() {
       // 404 means no active plan — that's the empty state, not an error
       const err = planResult.reason as { status?: number };
       if (err?.status !== 404) {
-        screenError = getErrorMessage(planResult.reason, "Unable to load plan.");
+        screenError = getErrorMessage(
+          planResult.reason,
+          "Unable to load plan.",
+        );
       }
       plan = null;
       selectedPoolId = equipmentPools[0]?.id ?? null;
