@@ -1,0 +1,122 @@
+<h2>/plan screen — final design</h2>
+<p class="subtitle">Approved direction</p>
+
+<div style="display: flex; justify-content: center;">
+<div style="width: 360px; height: 640px; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; overflow: hidden; font-size: 0.8rem; box-shadow: 0 8px 40px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+
+  <!-- Nav bar -->
+  <div style="flex-shrink: 0; background: rgba(15,15,26,0.97); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 10px 14px; display: flex; align-items: center; gap: 10px; backdrop-filter: blur(8px);">
+    <span style="color: rgba(255,255,255,0.3); font-size: 11px;">← Dashboard</span>
+    <span style="flex: 1;"></span>
+    <span style="color: #fbbf24; font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Hone</span>
+  </div>
+
+  <!-- Scrollable content -->
+  <div style="flex: 1; overflow-y: auto; background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 100%); padding: 16px; display: grid; gap: 14px; align-content: start;">
+
+    <div>
+      <div style="color: #fbbf24; font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; margin-bottom: 4px;">Mesocyclus</div>
+      <div style="font-size: 1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; margin-bottom: 2px;">Calisthenics + Rowing</div>
+      <div style="color: rgba(255,255,255,0.35); font-size: 11px;">4 cycles · 12 sessions total</div>
+    </div>
+
+    <div style="border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; background: rgba(255,255,255,0.02);">
+      <div style="color: rgba(255,255,255,0.3); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px;">Progress · 5 of 12 sessions</div>
+      <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center;">
+        <span style="color: rgba(255,255,255,0.25); font-size: 10px;">Cycle 1</span>
+        <div style="display: flex; gap: 5px; align-items: center;">
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: #fbbf24; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #111;">1</span>
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: #fbbf24; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #111;">2</span>
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: #fbbf24; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #111;">3</span>
+          <span style="color: #22c55e; font-size: 10px; font-weight: 700; margin-left: 4px;">✓</span>
+        </div>
+        <span style="color: rgba(255,255,255,0.55); font-size: 10px; font-weight: 600;">Cycle 2</span>
+        <div style="display: flex; gap: 5px; align-items: center;">
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: #fbbf24; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #111;">1</span>
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: #fbbf24; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #111;">2</span>
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: transparent; border: 2px solid #fbbf24; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #fbbf24; position: relative;">3
+            <span style="position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; background: #fbbf24; border-radius: 50%; border: 1.5px solid #0f0f1a;"></span>
+          </span>
+          <span style="color: #fbbf24; font-size: 10px; font-weight: 700; margin-left: 4px;">← next</span>
+        </div>
+        <span style="color: rgba(255,255,255,0.2); font-size: 10px;">Cycle 3</span>
+        <div style="display: flex; gap: 5px;">
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 9px; color: rgba(255,255,255,0.2);">1</span>
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 9px; color: rgba(255,255,255,0.2);">2</span>
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 9px; color: rgba(255,255,255,0.2);">3</span>
+        </div>
+        <span style="color: rgba(255,255,255,0.2); font-size: 10px;">Cycle 4</span>
+        <div style="display: flex; gap: 5px;">
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 9px; color: rgba(255,255,255,0.2);">1</span>
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 9px; color: rgba(255,255,255,0.2);">2</span>
+          <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 9px; color: rgba(255,255,255,0.2);">3</span>
+        </div>
+      </div>
+      <div style="margin-top: 10px; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+        <div style="height: 100%; width: 41%; background: linear-gradient(90deg, #fbbf24, #f59e0b); border-radius: 2px;"></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="color: rgba(255,255,255,0.3); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px;">Sessions per cycle</div>
+      <div style="display: grid; gap: 7px;">
+        <div style="border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px;">
+          <div style="color: rgba(255,255,255,0.3); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 7px;">Session 1</div>
+          <div style="display: grid; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.7); font-size: 0.78rem;"><span>Pull-up</span><span style="color: rgba(255,255,255,0.3);">3 × 8</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.7); font-size: 0.78rem;"><span>Bird Dog</span><span style="color: rgba(255,255,255,0.3);">3 × 10</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.7); font-size: 0.78rem;"><span>Dead Bug</span><span style="color: rgba(255,255,255,0.3);">3 × 10</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.45); font-size: 0.72rem; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 4px; margin-top: 2px;"><span>Hip Hinge</span><span>3 × 10</span></div>
+          </div>
+        </div>
+        <div style="border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px;">
+          <div style="color: rgba(255,255,255,0.3); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 7px;">Session 2</div>
+          <div style="display: grid; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.7); font-size: 0.78rem;"><span>Push-up</span><span style="color: rgba(255,255,255,0.3);">3 × 12</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.7); font-size: 0.78rem;"><span>Incline Push-up</span><span style="color: rgba(255,255,255,0.3);">3 × 10</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.7); font-size: 0.78rem;"><span>Floor Press</span><span style="color: rgba(255,255,255,0.3);">3 × 10</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.45); font-size: 0.72rem; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 4px; margin-top: 2px;"><span>Front Plank</span><span>3 × 45s</span></div>
+          </div>
+        </div>
+        <div style="border: 1px solid rgba(251,191,36,0.3); border-radius: 8px; padding: 10px 12px; background: rgba(251,191,36,0.03);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
+            <div style="color: rgba(255,255,255,0.3); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">Session 3</div>
+            <div style="color: #fbbf24; font-size: 10px; font-weight: 700;">UP NEXT</div>
+          </div>
+          <div style="display: grid; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.75); font-size: 0.78rem;"><span>Row Erg</span><span style="color: rgba(255,255,255,0.35);">3 × 500m</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.75); font-size: 0.78rem;"><span>Hollow Hold</span><span style="color: rgba(255,255,255,0.35);">3 × 30s</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.75); font-size: 0.78rem;"><span>Calf Raise</span><span style="color: rgba(255,255,255,0.35);">3 × 15</span></div>
+            <div style="display: flex; justify-content: space-between; color: rgba(255,255,255,0.45); font-size: 0.72rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px; margin-top: 2px;"><span>Walking</span><span>1 × 10 min</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height: 8px;"></div>
+  </div>
+
+  <!-- Fixed bottom action bar -->
+  <div style="flex-shrink: 0; background: rgba(10,10,20,0.97); border-top: 1px solid rgba(255,255,255,0.09); padding: 12px 14px; backdrop-filter: blur(12px);">
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; margin-bottom: 8px;">
+      <div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.8px;">Equipment</div>
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 8px; color: rgba(255,255,255,0.55); font-size: 0.7rem;">Bodyweight ▾</div>
+      </div>
+      <div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.8px;">Cycles</div>
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 8px; color: rgba(255,255,255,0.55); font-size: 0.7rem;">4 ▾</div>
+      </div>
+      <div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.8px;">Session</div>
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 8px; color: rgba(255,255,255,0.55); font-size: 0.7rem;">45 min ▾</div>
+      </div>
+    </div>
+    <button style="width: 100%; padding: 11px; border: 0; border-radius: 8px; background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #111; font-weight: 800; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;">
+      Regenerate →
+    </button>
+    <p style="margin: 6px 0 0; color: rgba(255,255,255,0.2); font-size: 10px; text-align: center;">Archives current · session history kept</p>
+  </div>
+
+</div>
+</div>
