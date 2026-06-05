@@ -271,7 +271,7 @@ async function completeOnboarding() {
       await api.createPlan({
         equipmentPoolId: resolvedPoolId ?? undefined,
         sessionMinutes: 30,
-        weeksCount: 4,
+        cycleCount: 4,
       });
 
       dashboardFlash = {
