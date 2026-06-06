@@ -90,7 +90,11 @@ const FIXTURE_EXERCISES: ExerciseFixture[] = [
 
   // Pulling
   { category: "back", nameEn: "Chin-up", primaryMuscle: "biceps" },
-  { category: "back", nameEn: "Australian Pull-up", primaryMuscle: "upper back" },
+  {
+    category: "back",
+    nameEn: "Australian Pull-up",
+    primaryMuscle: "upper back",
+  },
   { category: "core", nameEn: "Hanging Knee Raise", primaryMuscle: "core" },
   { category: "back", nameEn: "Scapular Pull-up", primaryMuscle: "upper back" },
 
@@ -106,12 +110,24 @@ const FIXTURE_EXERCISES: ExerciseFixture[] = [
   { category: "core", nameEn: "L-sit Hold", primaryMuscle: "core" },
   { category: "core", nameEn: "Tuck L-sit", primaryMuscle: "core" },
   { category: "core", nameEn: "Dragon Flag Negative", primaryMuscle: "core" },
-  { category: "conditioning", nameEn: "Mountain Climbers", primaryMuscle: "core" },
+  {
+    category: "conditioning",
+    nameEn: "Mountain Climbers",
+    primaryMuscle: "core",
+  },
   { category: "core", nameEn: "Crucifix Crunch", primaryMuscle: "obliques" },
 
   // Conditioning / full-body
-  { category: "conditioning", nameEn: "Burpees", primaryMuscle: "conditioning" },
-  { category: "conditioning", nameEn: "Jump Squat", primaryMuscle: "conditioning" },
+  {
+    category: "conditioning",
+    nameEn: "Burpees",
+    primaryMuscle: "conditioning",
+  },
+  {
+    category: "conditioning",
+    nameEn: "Jump Squat",
+    primaryMuscle: "conditioning",
+  },
   { category: "conditioning", nameEn: "Bear Crawl", primaryMuscle: "core" },
   { category: "core", nameEn: "Inchworm", primaryMuscle: "core" },
 ];
