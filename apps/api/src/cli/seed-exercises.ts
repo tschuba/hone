@@ -87,6 +87,49 @@ const FIXTURE_EXERCISES: ExerciseFixture[] = [
   { category: "conditioning", nameEn: "Bike Erg", primaryMuscle: "legs" },
   { category: "conditioning", nameEn: "Walking", primaryMuscle: "legs" },
   { category: "conditioning", nameEn: "March in Place", primaryMuscle: "legs" },
+
+  // Pulling
+  { category: "back", nameEn: "Chin-up", primaryMuscle: "biceps" },
+  {
+    category: "back",
+    nameEn: "Australian Pull-up",
+    primaryMuscle: "upper back",
+  },
+  { category: "core", nameEn: "Hanging Knee Raise", primaryMuscle: "core" },
+  { category: "back", nameEn: "Scapular Pull-up", primaryMuscle: "upper back" },
+
+  // Pushing
+  { category: "chest", nameEn: "Dips", primaryMuscle: "triceps" },
+  { category: "shoulders", nameEn: "Pike Push-up", primaryMuscle: "shoulders" },
+  { category: "chest", nameEn: "Diamond Push-up", primaryMuscle: "triceps" },
+  { category: "chest", nameEn: "Wide Push-up", primaryMuscle: "chest" },
+  { category: "chest", nameEn: "Archer Push-up", primaryMuscle: "chest" },
+
+  // Core
+  { category: "core", nameEn: "Hollow Rock", primaryMuscle: "core" },
+  { category: "core", nameEn: "L-sit Hold", primaryMuscle: "core" },
+  { category: "core", nameEn: "Tuck L-sit", primaryMuscle: "core" },
+  { category: "core", nameEn: "Dragon Flag Negative", primaryMuscle: "core" },
+  {
+    category: "conditioning",
+    nameEn: "Mountain Climbers",
+    primaryMuscle: "core",
+  },
+  { category: "core", nameEn: "Crucifix Crunch", primaryMuscle: "obliques" },
+
+  // Conditioning / full-body
+  {
+    category: "conditioning",
+    nameEn: "Burpees",
+    primaryMuscle: "conditioning",
+  },
+  {
+    category: "conditioning",
+    nameEn: "Jump Squat",
+    primaryMuscle: "conditioning",
+  },
+  { category: "conditioning", nameEn: "Bear Crawl", primaryMuscle: "core" },
+  { category: "core", nameEn: "Inchworm", primaryMuscle: "core" },
 ];
 
 async function waitForApiReady() {
@@ -139,11 +182,15 @@ async function seedFixtures() {
       primaryMuscle: fixture.primaryMuscle,
     });
 
-    if (result.skipped) {
+    const exercise = await db.exercise.findFirst({
+      where: { nameEn: fixture.nameEn },
+    });
+
+    if (!exercise) {
       continue;
     }
 
-    await db.tag.upsert({
+    const muscleGroupTag = await db.tag.upsert({
       where: {
         category_value: {
           category: "MUSCLE_GROUP",
@@ -157,11 +204,53 @@ async function seedFixtures() {
       },
     });
 
-    const exercise = await db.exercise.findFirst({
-      where: { nameEn: fixture.nameEn },
+    await db.exerciseTag.upsert({
+      where: {
+        exerciseId_tagId: {
+          exerciseId: exercise.id,
+          tagId: muscleGroupTag.id,
+        },
+      },
+      update: { confidence: 1.0, source: "HEURISTIC" },
+      create: {
+        confidence: 1.0,
+        exerciseId: exercise.id,
+        source: "HEURISTIC",
+        tagId: muscleGroupTag.id,
+      },
     });
 
-    if (!exercise) {
+    const categoryTag = await db.tag.upsert({
+      where: {
+        category_value: {
+          category: "CATEGORY",
+          value: fixture.category,
+        },
+      },
+      update: {},
+      create: {
+        category: "CATEGORY",
+        value: fixture.category,
+      },
+    });
+
+    await db.exerciseTag.upsert({
+      where: {
+        exerciseId_tagId: {
+          exerciseId: exercise.id,
+          tagId: categoryTag.id,
+        },
+      },
+      update: { confidence: 1.0, source: "HEURISTIC" },
+      create: {
+        confidence: 1.0,
+        exerciseId: exercise.id,
+        source: "HEURISTIC",
+        tagId: categoryTag.id,
+      },
+    });
+
+    if (result.skipped) {
       continue;
     }
 

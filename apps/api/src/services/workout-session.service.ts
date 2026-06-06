@@ -21,7 +21,9 @@ function normalizeCandidateTags(
   return exerciseLog.exercise.tags
     .filter(
       ({ tag }) =>
-        tag.category === "EQUIPMENT" || tag.category === "MUSCLE_GROUP",
+        tag.category === "EQUIPMENT" ||
+        tag.category === "MUSCLE_GROUP" ||
+        tag.category === "CATEGORY",
     )
     .map(({ tag }) => `${tag.category}:${tag.value}`);
 }
@@ -70,10 +72,9 @@ async function resolveSubstitutionCandidates(
   userId: string,
 ) {
   const desiredTags = new Set(normalizeCandidateTags(exerciseLog));
-  const excludedExerciseIds = [
-    exerciseLog.exerciseId,
-    exerciseLog.substitutedForExerciseId,
-  ].filter((value): value is string => Boolean(value));
+  const excludedExerciseIds = [exerciseLog.exerciseId].filter(
+    (value): value is string => Boolean(value),
+  );
   const candidates = await repository.listCandidateExercises({
     excludeExerciseIds: excludedExerciseIds,
     tagValues: [...desiredTags].map((value) => value.split(":")[1] ?? value),

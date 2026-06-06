@@ -23,8 +23,8 @@ This change defines the MVP scope and tracks readiness across the three dedicate
 
 | Change | What it closes | Status |
 |--------|---------------|--------|
-| [plan-screen](../plan-screen/proposal.md) | Plan invisible, generation ignores equipment/duration | Not started |
-| [calisthenics-fixtures](../calisthenics-fixtures/proposal.md) | Exercise library too thin for bodyweight training | Not started |
+| [plan-screen](../archive/2026-06-05-plan-screen/proposal.md) | Plan invisible, generation ignores equipment/duration | Complete |
+| [calisthenics-fixtures](../archive/2026-06-06-calisthenics-fixtures/proposal.md) | Exercise library too thin for bodyweight training | Complete |
 | [rule-engine-variety](../rule-engine-variety/proposal.md) | Sessions repeat the same exercises every cycle | Not started |
 | [deployment-coolify](../deployment-coolify/proposal.md) | App not reachable outside home network | Not started |
 
