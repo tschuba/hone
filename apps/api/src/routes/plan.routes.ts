@@ -88,6 +88,7 @@ type PlanStorage = {
 
 type PlanRouteOptions = {
   aiRateLimiter?: {
+    check(userId: string, type?: "FEEDBACK" | "MESOCYCLUS"): Promise<void>;
     checkAndRecord(
       userId: string,
       input?: unknown,
@@ -348,6 +349,7 @@ export function createPlanRoutes(options: PlanRouteOptions = {}) {
       weeksCount: cycleCount,
     };
     try {
+      await aiRateLimiter.check(userId, "MESOCYCLUS");
       await storage.archiveActiveMesocyclus(userId);
       const plan = await ruleEngine.generate(planOptions);
       const mesocyclus = await storage.createMesocyclus({

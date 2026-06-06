@@ -7,6 +7,7 @@ import { createPlanRoutes } from "./plan.routes";
 
 function createTestApp(options: {
   aiRateLimiter: {
+    check(userId: string, type?: string): Promise<void>;
     checkAndRecord(userId: string, input?: unknown): Promise<{ id: string }>;
   };
   notifier?: {
@@ -182,6 +183,7 @@ describe("plan routes", () => {
 
     const app = createTestApp({
       aiRateLimiter: {
+        async check() {},
         async checkAndRecord(_userId, input) {
           queuedInput = input;
           return { id: "job-1" };
@@ -237,6 +239,7 @@ describe("plan routes", () => {
   it("returns 404 when no equipment pool is available", async () => {
     const app = createTestApp({
       aiRateLimiter: {
+        async check() {},
         async checkAndRecord() {
           return { id: "job-1" };
         },
@@ -265,6 +268,7 @@ describe("plan routes", () => {
     it("returns the active plan with isNext on the correct session", async () => {
       const app = createTestApp({
         aiRateLimiter: {
+          async check() {},
           async checkAndRecord() {
             return { id: "job-1" };
           },
@@ -291,6 +295,7 @@ describe("plan routes", () => {
     it("returns 404 when no active plan exists", async () => {
       const app = createTestApp({
         aiRateLimiter: {
+          async check() {},
           async checkAndRecord() {
             return { id: "job-1" };
           },
@@ -318,6 +323,7 @@ describe("plan routes", () => {
 
       const app = createTestApp({
         aiRateLimiter: {
+          async check() {},
           async checkAndRecord() {
             return { id: "job-1" };
           },

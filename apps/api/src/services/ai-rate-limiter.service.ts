@@ -101,12 +101,7 @@ export class AiRateLimiter {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async checkAndRecord(
-    userId: string,
-    input?: Prisma.InputJsonValue,
-    priority?: "FEEDBACK" | "NORMAL",
-    type?: "FEEDBACK" | "MESOCYCLUS",
-  ) {
+  async check(userId: string, type?: "FEEDBACK" | "MESOCYCLUS") {
     const now = this.now();
     const sixtyMinsAgo = new Date(now.getTime() - 60 * 60 * 1000);
     const startOfDay = new Date(now);
@@ -129,7 +124,15 @@ export class AiRateLimiter {
     if (todayCount >= 5) {
       throw new Error("Daily limit reached (5 plans/day)");
     }
+  }
 
+  async checkAndRecord(
+    userId: string,
+    input?: Prisma.InputJsonValue,
+    priority?: "FEEDBACK" | "NORMAL",
+    type?: "FEEDBACK" | "MESOCYCLUS",
+  ) {
+    await this.check(userId, type);
     return this.store.createJob({ input, priority, type, userId });
   }
 }

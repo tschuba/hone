@@ -2,8 +2,8 @@
 
 ## Sub-Change Completion
 
-- [ ] 1.1 `plan-screen` — all tasks in [plan-screen/tasks.md](../plan-screen/tasks.md) complete and merged.
-- [ ] 1.2 `calisthenics-fixtures` — all tasks in [calisthenics-fixtures/tasks.md](../calisthenics-fixtures/tasks.md) complete and merged.
+- [x] 1.1 `plan-screen` — all tasks in [plan-screen/tasks.md](../plan-screen/tasks.md) complete and merged.
+- [x] 1.2 `calisthenics-fixtures` — all tasks in [calisthenics-fixtures/tasks.md](../calisthenics-fixtures/tasks.md) complete and merged.
 - [ ] 1.3 `rule-engine-variety` — all tasks in [rule-engine-variety/tasks.md](../rule-engine-variety/tasks.md) complete and merged.
 - [ ] 1.4 `deployment-coolify` — all tasks in [deployment-coolify/tasks.md](../deployment-coolify/tasks.md) complete and merged.
 

@@ -5,7 +5,17 @@ type ExerciseTagInput = {
   value: string;
 };
 
-const KNEE_LOAD_PATTERNS = [/squat/i, /lunge/i, /leg press/i, /step.?up/i];
+const KNEE_LOAD_PATTERNS = [
+  /squat/i,
+  /lunge/i,
+  /leg press/i,
+  /step.?up/i,
+  /burpee/i,
+  /mountain.?climber/i,
+  /bear.?crawl/i,
+  /wall.?sit/i,
+  /leg.?extension/i,
+];
 const BACK_LOAD_PATTERNS = [/deadlift/i, /good morning/i, /bent.?over/i];
 
 export class Tier1Tagger {
