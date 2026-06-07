@@ -64,26 +64,90 @@ const BODYWEIGHT_POOL = [
 // Pool with 4 exercises per bucket for cross-contamination checks
 const FULL_BUCKET_POOL = [
   // Bucket A: back/core/lats/upper_back
-  { id: "a1", nameEn: "Bird Dog", suggestedRestSecs: 30, tags: [{ tag: { category: "MUSCLE_GROUP", value: "core" } }] },
-  { id: "a2", nameEn: "Deadbug", suggestedRestSecs: 30, tags: [{ tag: { category: "MUSCLE_GROUP", value: "back" } }] },
-  { id: "a3", nameEn: "Pull-up", suggestedRestSecs: 75, tags: [{ tag: { category: "MUSCLE_GROUP", value: "lats" } }] },
-  { id: "a4", nameEn: "Row", suggestedRestSecs: 60, tags: [{ tag: { category: "MUSCLE_GROUP", value: "upper_back" } }] },
+  {
+    id: "a1",
+    nameEn: "Bird Dog",
+    suggestedRestSecs: 30,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "core" } }],
+  },
+  {
+    id: "a2",
+    nameEn: "Deadbug",
+    suggestedRestSecs: 30,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "back" } }],
+  },
+  {
+    id: "a3",
+    nameEn: "Pull-up",
+    suggestedRestSecs: 75,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "lats" } }],
+  },
+  {
+    id: "a4",
+    nameEn: "Row",
+    suggestedRestSecs: 60,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "upper_back" } }],
+  },
   // Bucket B: chest/shoulders/triceps/rear_delts
-  { id: "b1", nameEn: "Push-up", suggestedRestSecs: 60, tags: [{ tag: { category: "MUSCLE_GROUP", value: "chest" } }] },
-  { id: "b2", nameEn: "Pike Press", suggestedRestSecs: 60, tags: [{ tag: { category: "MUSCLE_GROUP", value: "shoulders" } }] },
-  { id: "b3", nameEn: "Triceps Dip", suggestedRestSecs: 60, tags: [{ tag: { category: "MUSCLE_GROUP", value: "triceps" } }] },
-  { id: "b4", nameEn: "Face Pull", suggestedRestSecs: 45, tags: [{ tag: { category: "MUSCLE_GROUP", value: "rear_delts" } }] },
+  {
+    id: "b1",
+    nameEn: "Push-up",
+    suggestedRestSecs: 60,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "chest" } }],
+  },
+  {
+    id: "b2",
+    nameEn: "Pike Press",
+    suggestedRestSecs: 60,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "shoulders" } }],
+  },
+  {
+    id: "b3",
+    nameEn: "Triceps Dip",
+    suggestedRestSecs: 60,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "triceps" } }],
+  },
+  {
+    id: "b4",
+    nameEn: "Face Pull",
+    suggestedRestSecs: 45,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "rear_delts" } }],
+  },
   // Bucket C: biceps/conditioning/mobility/pull
-  { id: "c1", nameEn: "Biceps Curl", suggestedRestSecs: 45, tags: [{ tag: { category: "MUSCLE_GROUP", value: "biceps" } }] },
-  { id: "c2", nameEn: "March in Place", suggestedRestSecs: 30, tags: [{ tag: { category: "MUSCLE_GROUP", value: "conditioning" } }] },
-  { id: "c3", nameEn: "Hip Hinge Stretch", suggestedRestSecs: 20, tags: [{ tag: { category: "MUSCLE_GROUP", value: "mobility" } }] },
-  { id: "c4", nameEn: "Ring Row", suggestedRestSecs: 60, tags: [{ tag: { category: "MUSCLE_GROUP", value: "pull" } }] },
+  {
+    id: "c1",
+    nameEn: "Biceps Curl",
+    suggestedRestSecs: 45,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "biceps" } }],
+  },
+  {
+    id: "c2",
+    nameEn: "March in Place",
+    suggestedRestSecs: 30,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "conditioning" } }],
+  },
+  {
+    id: "c3",
+    nameEn: "Hip Hinge Stretch",
+    suggestedRestSecs: 20,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "mobility" } }],
+  },
+  {
+    id: "c4",
+    nameEn: "Ring Row",
+    suggestedRestSecs: 60,
+    tags: [{ tag: { category: "MUSCLE_GROUP", value: "pull" } }],
+  },
 ];
 
 const BUCKET_A_IDS = new Set(["a1", "a2", "a3", "a4"]);
 const BUCKET_B_IDS = new Set(["b1", "b2", "b3", "b4"]);
 const BUCKET_C_IDS = new Set(["c1", "c2", "c3", "c4"]);
-const BUCKET_IDS_BY_LABEL: Record<string, Set<string>> = { A: BUCKET_A_IDS, B: BUCKET_B_IDS, C: BUCKET_C_IDS };
+const BUCKET_IDS_BY_LABEL: Record<string, Set<string>> = {
+  A: BUCKET_A_IDS,
+  B: BUCKET_B_IDS,
+  C: BUCKET_C_IDS,
+};
 
 describe("RuleEngineService", () => {
   const makeEngine = () =>
@@ -91,7 +155,9 @@ describe("RuleEngineService", () => {
       list: async () => BODYWEIGHT_POOL,
     }));
 
-  const defaultOpts = (overrides: Partial<GeneratePlanOptions> = {}): GeneratePlanOptions => ({
+  const defaultOpts = (
+    overrides: Partial<GeneratePlanOptions> = {},
+  ): GeneratePlanOptions => ({
     equipmentTags: ["bodyweight"],
     sessionMinutes: 30,
     userId: "u1",
@@ -115,7 +181,9 @@ describe("RuleEngineService", () => {
       },
     }));
 
-    const plan = await ruleEngine.generate(defaultOpts({ excludeModifiers: ["knee_load"] }));
+    const plan = await ruleEngine.generate(
+      defaultOpts({ excludeModifiers: ["knee_load"] }),
+    );
 
     expect(receivedFilters).toEqual({
       excludeModifiers: ["knee_load"],
@@ -192,8 +260,12 @@ describe("RuleEngineService", () => {
     const plan1 = await ruleEngine.generate({ ...defaultOpts(), seed: 100 });
     const plan2 = await ruleEngine.generate({ ...defaultOpts(), seed: 200 });
 
-    const ids1 = plan1.workouts.flatMap((w) => w.exercises.map((e) => e.exerciseId)).join(",");
-    const ids2 = plan2.workouts.flatMap((w) => w.exercises.map((e) => e.exerciseId)).join(",");
+    const ids1 = plan1.workouts
+      .flatMap((w) => w.exercises.map((e) => e.exerciseId))
+      .join(",");
+    const ids2 = plan2.workouts
+      .flatMap((w) => w.exercises.map((e) => e.exerciseId))
+      .join(",");
 
     expect(ids1).not.toBe(ids2);
   });

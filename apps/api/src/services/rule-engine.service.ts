@@ -56,7 +56,7 @@ const BUCKET_TAGS: Record<WorkoutLabel, string[]> = {
 
 function createRandom(seed: number): () => number {
   let s = seed | 0;
-  return function () {
+  return () => {
     s = (s + 0x6d2b79f5) | 0;
     let t = Math.imul(s ^ (s >>> 15), 1 | s);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
@@ -194,7 +194,10 @@ export class RuleEngineService {
       );
       const shuffledBucket = shuffleExercises(bucket, random);
       const shuffledPool = shuffleExercises(pool, random);
-      const [warmup, mainA, mainB, cooldown] = selectExercises(shuffledBucket, shuffledPool);
+      const [warmup, mainA, mainB, cooldown] = selectExercises(
+        shuffledBucket,
+        shuffledPool,
+      );
 
       return {
         estimatedDurationMinutes: estimateDuration(opts.sessionMinutes),
