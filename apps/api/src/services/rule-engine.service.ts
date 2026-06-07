@@ -30,6 +30,7 @@ type RuleEngineRepository = {
 export type GeneratePlanOptions = {
   equipmentTags: string[];
   excludeModifiers?: string[];
+  seed?: number;
   sessionMinutes: number;
   userId: string;
   weeksCount: number;
@@ -53,16 +54,26 @@ const BUCKET_TAGS: Record<WorkoutLabel, string[]> = {
   C: ["biceps", "conditioning", "mobility", "pull"],
 };
 
-function sortExercises(exercises: RuleEngineExerciseRecord[]) {
-  return [...exercises].sort((left, right) => {
-    const byName = left.nameEn.localeCompare(right.nameEn);
+function createRandom(seed: number): () => number {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-    if (byName !== 0) {
-      return byName;
-    }
-
-    return left.id.localeCompare(right.id);
-  });
+function shuffleExercises(
+  exercises: RuleEngineExerciseRecord[],
+  random: () => number,
+): RuleEngineExerciseRecord[] {
+  const arr = [...exercises];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
 function normalizeTags(exercise: RuleEngineExerciseRecord) {
@@ -169,19 +180,24 @@ export class RuleEngineService {
 
   async generate(opts: GeneratePlanOptions): Promise<MesocyclusPlan> {
     const repository = this.createRepository(opts.userId);
-    const pool = sortExercises(
-      await repository.list({
-        excludeModifiers: opts.excludeModifiers,
-        limit: 100,
-        tags: opts.equipmentTags,
-      }),
-    );
+    const pool = await repository.list({
+      excludeModifiers: opts.excludeModifiers,
+      limit: 100,
+      tags: opts.equipmentTags,
+    });
+
+    const random = createRandom(opts.seed ?? Date.now());
 
     const workouts = WORKOUT_LABELS.map((label, index) => {
       const bucket = pool.filter((exercise) =>
         hasAnyBucketTag(exercise, BUCKET_TAGS[label]),
       );
-      const [warmup, mainA, mainB, cooldown] = selectExercises(bucket, pool);
+      const shuffledBucket = shuffleExercises(bucket, random);
+      const shuffledPool = shuffleExercises(pool, random);
+      const [warmup, mainA, mainB, cooldown] = selectExercises(
+        shuffledBucket,
+        shuffledPool,
+      );
 
       return {
         estimatedDurationMinutes: estimateDuration(opts.sessionMinutes),
