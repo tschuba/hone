@@ -298,7 +298,10 @@ async function main() {
     throw new Error("Only --fixture-only seeding is currently implemented");
   }
 
-  await waitForApiReady();
+  if (!args.has("--no-wait")) {
+    await waitForApiReady();
+  }
+
   await seedFixtures();
   await closeDatabase();
 }
