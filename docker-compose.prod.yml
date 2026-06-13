@@ -1,0 +1,81 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: hone-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hone
+      POSTGRES_USER: hone
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hone -d hone']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hone
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: hone-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://hone:${DB_PASSWORD}@db:5432/hone?connection_limit=5&pool_timeout=10
+      SESSION_SECRET: ${SESSION_SECRET}
+      CSRF_SECRET: ${CSRF_SECRET}
+      APP_URL: ${APP_URL}
+      NODE_ENV: production
+      PORT: 3001
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      AI_BASE_URL: ${AI_BASE_URL:-http://ollama:11434}
+      AI_MODEL: ${AI_MODEL:-llama3.2}
+      USE_LOCAL_AUTH_ONLY: ${USE_LOCAL_AUTH_ONLY:-false}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_ROLE_CLAIM: ${OIDC_ROLE_CLAIM:-groups}
+      OIDC_ADMIN_VALUE: ${OIDC_ADMIN_VALUE:-admin}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+    ports:
+      - '3001:3001'
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hone
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: hone-web
+    restart: unless-stopped
+    ports:
+      - '3000:80'
+    networks:
+      - hone
+
+  # Optional: disable by removing this service or using --profile ai
+  ollama:
+    image: ollama/ollama
+    container_name: hone-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - hone
+    profiles:
+      - ai
+
+volumes:
+  db-data:
+  ollama-data:
+
+networks:
+  hone:
+    driver: bridge
