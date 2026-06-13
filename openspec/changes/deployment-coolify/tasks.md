@@ -18,5 +18,5 @@
 
 ## 4. Validation
 
-- [ ] 4.1 Register a new account, complete onboarding, generate a plan, start and complete a workout — full flow from a mobile browser over the public URL.
+- [x] 4.1 Register a new account, complete onboarding, generate a plan, start and complete a workout — full flow from a mobile browser over the public URL.
 - [ ] 4.2 Verify PWA install prompt appears on mobile and the installed PWA loads the cached workout offline.
