@@ -83,12 +83,14 @@ const defaultAuthRouteStorage: AuthRouteStorage = {
   },
 };
 
+const secureCookies = new URL(config.APP_URL).protocol === "https:";
+
 function sessionCookieOptions() {
   return {
     httpOnly: true,
     path: "/",
     sameSite: "Strict" as const,
-    secure: config.NODE_ENV === "production",
+    secure: secureCookies,
   };
 }
 
@@ -97,7 +99,7 @@ function csrfCookieOptions() {
     httpOnly: false,
     path: "/",
     sameSite: "Strict" as const,
-    secure: config.NODE_ENV === "production",
+    secure: secureCookies,
   };
 }
 
