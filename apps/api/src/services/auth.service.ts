@@ -71,7 +71,7 @@ export class AuthService {
 
   async createLocalUser(email: string, password: string) {
     if (password.length < 12) {
-      throw new Error("Password too short");
+      throw new Error("Password must be at least 12 characters");
     }
 
     const passwordHash = await argon2.hash(password, ARGON2_OPTS);
