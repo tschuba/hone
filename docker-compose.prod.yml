@@ -18,9 +18,7 @@ services:
       - hone
 
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    image: ghcr.io/tschuba/hone-api:latest
     container_name: hone-api
     restart: unless-stopped
     environment:
@@ -50,9 +48,7 @@ services:
       - hone
 
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
+    image: ghcr.io/tschuba/hone-web:latest
     container_name: hone-web
     restart: unless-stopped
     ports:
