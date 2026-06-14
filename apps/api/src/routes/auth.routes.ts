@@ -83,12 +83,14 @@ const defaultAuthRouteStorage: AuthRouteStorage = {
   },
 };
 
+const secureCookies = new URL(config.APP_URL).protocol === "https:";
+
 function sessionCookieOptions() {
   return {
     httpOnly: true,
     path: "/",
     sameSite: "Strict" as const,
-    secure: config.NODE_ENV === "production",
+    secure: secureCookies,
   };
 }
 
@@ -97,7 +99,7 @@ function csrfCookieOptions() {
     httpOnly: false,
     path: "/",
     sameSite: "Strict" as const,
-    secure: config.NODE_ENV === "production",
+    secure: secureCookies,
   };
 }
 
@@ -172,7 +174,10 @@ export function createAuthRoutes(
 
       return c.json({ email: user.email, id: user.id }, 201);
     } catch (error) {
-      if (error instanceof Error && error.message === "Password too short") {
+      if (
+        error instanceof Error &&
+        error.message.startsWith("Password must be")
+      ) {
         return c.json({ status: 400, title: error.message }, 400);
       }
 

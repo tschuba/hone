@@ -1,0 +1,45 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+apps/web/build
+apps/web/.svelte-kit
+apps/api/dist
+
+# Dev environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+bun-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Test
+coverage
+*.test.ts
+*.spec.ts
+
+# Dev compose
+docker-compose.dev.yml
+
+# Git
+.git
+.gitignore
+
+# Docs / specs
+openspec
+docs
