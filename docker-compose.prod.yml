@@ -37,8 +37,8 @@ services:
       OIDC_ADMIN_VALUE: ${OIDC_ADMIN_VALUE:-admin}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
-    ports:
-      - '3001:3001'
+    # ports:
+    #   - '3001:3001'  # uncomment for local testing only — not needed in Coolify
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health || exit 1']
       interval: 10s
@@ -53,8 +53,8 @@ services:
     image: ghcr.io/tschuba/hone-web:latest
     container_name: hone-web
     restart: unless-stopped
-    ports:
-      - '3000:80'
+    # ports:
+    #   - '3000:80'  # uncomment for local testing only — not needed in Coolify
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:80/ || exit 1']
       interval: 10s
