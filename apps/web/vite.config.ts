@@ -36,19 +36,9 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+          navigateFallback: "/index.html",
+          navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
-            {
-              handler: "CacheFirst",
-              options: {
-                cacheName: "hone-app-shell",
-                expiration: {
-                  maxAgeSeconds: 30 * 24 * 60 * 60,
-                  maxEntries: 50,
-                },
-              },
-              urlPattern: ({ request, url }) =>
-                request.mode === "navigate" || url.pathname === "/",
-            },
             {
               handler: "CacheFirst",
               options: {
