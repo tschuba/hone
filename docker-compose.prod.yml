@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: hone
       POSTGRES_USER: hone
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_DB}
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -14,18 +14,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - hone
 
   api:
     image: ghcr.io/tschuba/hone-api:latest
     container_name: hone-api
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://hone:${DB_PASSWORD}@db:5432/hone?connection_limit=5&pool_timeout=10
-      SESSION_SECRET: ${SESSION_SECRET}
-      CSRF_SECRET: ${CSRF_SECRET}
-      APP_URL: ${APP_URL}
+      DATABASE_URL: postgresql://hone:${SERVICE_PASSWORD_DB}@db:5432/hone?connection_limit=5&pool_timeout=10
+      SESSION_SECRET: ${SERVICE_PASSWORD_SESSION}
+      CSRF_SECRET: ${SERVICE_PASSWORD_CSRF}
+      APP_URL: ${SERVICE_URL_WEB}
       NODE_ENV: production
       PORT: 3001
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
@@ -41,11 +39,15 @@ services:
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
     ports:
       - '3001:3001'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      - hone
 
   web:
     image: ghcr.io/tschuba/hone-web:latest
@@ -53,8 +55,11 @@ services:
     restart: unless-stopped
     ports:
       - '3000:80'
-    networks:
-      - hone
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:80/ || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # Optional: disable by removing this service or using --profile ai
   ollama:
@@ -63,15 +68,15 @@ services:
     restart: unless-stopped
     volumes:
       - ollama-data:/root/.ollama
-    networks:
-      - hone
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:11434/ || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     profiles:
       - ai
 
 volumes:
   db-data:
   ollama-data:
-
-networks:
-  hone:
-    driver: bridge
