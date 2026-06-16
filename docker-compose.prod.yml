@@ -40,7 +40,7 @@ services:
     expose:
       - '3001'
     healthcheck:
-      test: ['CMD-SHELL', 'wget -q --spider http://localhost:3001/health || exit 1']
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3001/health || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -71,7 +71,7 @@ services:
     volumes:
       - ollama-data:/root/.ollama
     healthcheck:
-      test: ['CMD-SHELL', 'wget -q --spider http://localhost:11434/ || exit 1']
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:11434/ || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
