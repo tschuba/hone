@@ -37,10 +37,10 @@ services:
       OIDC_ADMIN_VALUE: ${OIDC_ADMIN_VALUE:-admin}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
-    # ports:
-    #   - '3001:3001'  # uncomment for local testing only — not needed in Coolify
+    expose:
+      - '3001'
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health || exit 1']
+      test: ['CMD-SHELL', 'wget -q --spider http://localhost:3001/health || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,10 +53,12 @@ services:
     image: ghcr.io/tschuba/hone-web:latest
     container_name: hone-web
     restart: unless-stopped
-    # ports:
-    #   - '3000:80'  # uncomment for local testing only — not needed in Coolify
+    environment:
+      SERVICE_FQDN_WEB_80: ${SERVICE_FQDN_WEB_80}
+    expose:
+      - '80'
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:80/ || exit 1']
+      test: ['CMD-SHELL', 'wget -q --spider http://localhost:80/ || exit 1']
       interval: 10s
       timeout: 5s
       retries: 3
@@ -69,7 +71,7 @@ services:
     volumes:
       - ollama-data:/root/.ollama
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:11434/ || exit 1']
+      test: ['CMD-SHELL', 'wget -q --spider http://localhost:11434/ || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
