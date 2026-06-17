@@ -1,6 +1,11 @@
 import Dexie, { type Table } from "dexie";
 
-import type { ActiveWorkout, SetPayload, UserProfile } from "$lib/api";
+import type {
+  ActivePlan,
+  ActiveWorkout,
+  SetPayload,
+  UserProfile,
+} from "$lib/api";
 import { createStorageRecoveryError } from "$lib/network-errors";
 
 const OFFLINE_STORE_VERSION = "2";
@@ -60,13 +65,24 @@ type PendingProfileUpdateOp = PendingOpBase & {
   payload: UserProfile;
 };
 
+type PendingSessionCreateOp = PendingOpBase & {
+  entityType: "session";
+  operation: "create";
+  payload: {
+    exerciseLogs: Array<{ exerciseId: string; id: string; position: number }>;
+    sessionId: string;
+    templateId: string;
+  };
+};
+
 export type PendingOp =
   | PendingSetCreateOp
   | PendingWorkoutCompleteOp
   | PendingWorkoutSkipOp
   | PendingFeedbackCreateOp
   | PendingSubstitutionCreateOp
-  | PendingProfileUpdateOp;
+  | PendingProfileUpdateOp
+  | PendingSessionCreateOp;
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
   ? Omit<T, K>
@@ -74,6 +90,12 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
 
 export type CachedActiveWorkout = {
   data: ActiveWorkout;
+  id: string;
+  updatedAt: Date;
+};
+
+export type CachedActivePlan = {
+  data: ActivePlan;
   id: string;
   updatedAt: Date;
 };
@@ -126,6 +148,7 @@ function clearBrowserSentinel() {
 
 export class OfflineStore extends Dexie {
   activeWorkout!: Table<CachedActiveWorkout, string>;
+  activePlan!: Table<CachedActivePlan, string>;
   pendingOps!: Table<PendingOp, number>;
   syncMeta!: Table<SyncMetaRecord, string>;
 
@@ -136,6 +159,10 @@ export class OfflineStore extends Dexie {
       activeWorkout: "id, updatedAt",
       pendingOps: "++id, userId, createdAt, entityType, entityId",
       syncMeta: "key",
+    });
+
+    this.version(3).stores({
+      activePlan: "id, updatedAt",
     });
   }
 
@@ -229,6 +256,7 @@ export class OfflineStore extends Dexie {
 
   async clearUserOfflineState(userId: string) {
     await this.activeWorkout.delete(userId);
+    await this.activePlan.delete(userId);
     await this.pendingOps.where("userId").equals(userId).delete();
     await this.deleteScopedSyncMeta(userId, WORKOUT_ACTIVE_META_KEY);
     await this.deleteScopedSyncMeta(userId, LAST_SUCCESSFUL_REPLAY_META_KEY);
@@ -247,12 +275,33 @@ export class OfflineStore extends Dexie {
       return undefined;
     }
 
-    if (Date.now() - cachedWorkout.updatedAt.getTime() > 24 * 60 * 60 * 1000) {
-      await this.clearUserOfflineState(scope);
+    if (Date.now() - cachedWorkout.updatedAt.getTime() > 48 * 60 * 60 * 1000) {
+      await this.activeWorkout.delete(scope);
       return undefined;
     }
 
     return cachedWorkout;
+  }
+
+  async cacheActivePlan(data: ActivePlan, userId?: string) {
+    const scope = await this.requireCurrentUserId(userId);
+    await this.activePlan.put({ data, id: scope, updatedAt: new Date() });
+  }
+
+  async getCachedActivePlan(userId?: string) {
+    const scope = await this.requireCurrentUserId(userId);
+    const cached = await this.activePlan.get(scope);
+
+    if (!cached) {
+      return undefined;
+    }
+
+    if (Date.now() - cached.updatedAt.getTime() > 24 * 60 * 60 * 1000) {
+      await this.activePlan.delete(scope);
+      return undefined;
+    }
+
+    return cached;
   }
 
   async getCachedAuthUserId() {
@@ -385,6 +434,25 @@ export class OfflineStore extends Dexie {
       createdAt: new Date(),
       userId: scope,
     } as PendingOp);
+  }
+
+  async queueSessionCreate(
+    sessionId: string,
+    templateId: string,
+    exerciseLogs: Array<{ exerciseId: string; id: string; position: number }>,
+    userId?: string,
+  ) {
+    const scope = await this.requireCurrentUserId(userId);
+
+    return this.pendingOps.add({
+      createdAt: new Date(),
+      entityId: sessionId,
+      entityType: "session",
+      operation: "create",
+      payload: { exerciseLogs, sessionId, templateId },
+      retryCount: 0,
+      userId: scope,
+    });
   }
 
   async queueSkipToday(mesocyclusId: string, userId?: string) {

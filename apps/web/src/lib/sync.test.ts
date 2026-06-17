@@ -87,6 +87,25 @@ function createPendingSubstitution(exerciseLogId: string): PendingOp {
   };
 }
 
+function createPendingSessionCreate(): PendingOp {
+  return {
+    createdAt: new Date("2026-05-20T07:50:00.000Z"),
+    entityId: "session-1",
+    entityType: "session",
+    id: 5,
+    operation: "create",
+    payload: {
+      exerciseLogs: [
+        { exerciseId: "exercise-1", id: "exercise-log-1", position: 1 },
+      ],
+      sessionId: "session-1",
+      templateId: "template-1",
+    },
+    retryCount: 0,
+    userId: "user-1",
+  };
+}
+
 function createPendingFeedback(mesocyclusId: string): PendingOp {
   return {
     createdAt: new Date("2026-05-20T09:00:00.000Z"),
@@ -135,6 +154,9 @@ function createClient(
       throw new Error("not used");
     },
     async skipToday() {
+      throw new Error("not used");
+    },
+    async startSession() {
       throw new Error("not used");
     },
     async submitFeedback() {
@@ -190,6 +212,9 @@ function createStore(
     async queueFeedback() {},
     async queueOp() {
       return 1;
+    },
+    async queueSessionCreate() {
+      return 5;
     },
     async queueSkipToday() {
       return 4;
@@ -367,6 +392,132 @@ describe("sync helpers", () => {
 
     expect(flushed).toEqual(["set:session-1:set-1", "complete:session-1"]);
     expect(deleted).toEqual([1, 2]);
+    expect(result.status).toBe("synced");
+  });
+
+  it("flushes a queued offline session creation by calling startSession with the client ids", async () => {
+    let receivedArgs:
+      | [
+          string,
+          {
+            exerciseLogs?: Array<{
+              exerciseId: string;
+              id: string;
+              position: number;
+            }>;
+            id?: string;
+          },
+        ]
+      | undefined;
+
+    const result = await syncPendingOps({
+      client: createClient({
+        async startSession(templateId, options) {
+          receivedArgs = [templateId, options as never];
+          return {
+            exerciseLogs: [],
+            id: "session-1",
+            status: "ACTIVE",
+            templateId,
+          };
+        },
+      }),
+      store: createStore({
+        async listPendingOps() {
+          return [createPendingSessionCreate()];
+        },
+        async listPendingOpsCount() {
+          return 0;
+        },
+      }),
+    });
+
+    expect(receivedArgs).toEqual([
+      "template-1",
+      {
+        exerciseLogs: [
+          { exerciseId: "exercise-1", id: "exercise-log-1", position: 1 },
+        ],
+        id: "session-1",
+      },
+    ]);
+    expect(result.status).toBe("synced");
+  });
+
+  it("replays a queued session creation before substitution, set, and completion ops", async () => {
+    const flushed: string[] = [];
+    const set: SetPayload = {
+      exerciseLogId: "exercise-log-1",
+      reps: 10,
+      setNr: 1,
+      uuid: "set-1",
+    };
+
+    const result = await syncPendingOps({
+      client: createClient({
+        async completeWorkoutSession(sessionId) {
+          flushed.push(`complete:${sessionId}`);
+          return {
+            completedAt: new Date(),
+            id: sessionId,
+            status: "COMPLETED",
+          };
+        },
+        async logSet(sessionId, payload) {
+          flushed.push(`set:${sessionId}:${payload.uuid}`);
+          return {
+            durationSecs: null,
+            exerciseLogId: payload.exerciseLogId,
+            id: "server-set-1",
+            reps: payload.reps ?? null,
+            setNr: payload.setNr,
+            uuid: payload.uuid,
+          };
+        },
+        async startSession(templateId) {
+          flushed.push(`session:${templateId}`);
+          return {
+            exerciseLogs: [],
+            id: "session-1",
+            status: "ACTIVE",
+            templateId,
+          };
+        },
+        async substituteExercise(sessionId, exerciseLogId) {
+          flushed.push(`substitution:${sessionId}:${exerciseLogId}`);
+          return {
+            exerciseId: "exercise-new",
+            exerciseLogId,
+            imageAltText: "Alt text",
+            imageUrl: null,
+            name: "Replacement",
+            substitutedForExerciseId: "exercise-1",
+            substitutedForName: "Original",
+          };
+        },
+      }),
+      store: createStore({
+        async listPendingOps() {
+          // Deliberately queued out of dependency order.
+          return [
+            createPendingWorkoutCompletion(),
+            createPendingSet(set),
+            createPendingSubstitution("exercise-log-1"),
+            createPendingSessionCreate(),
+          ];
+        },
+        async listPendingOpsCount() {
+          return 0;
+        },
+      }),
+    });
+
+    expect(flushed).toEqual([
+      "session:template-1",
+      "substitution:session-1:exercise-log-1",
+      "set:session-1:set-1",
+      "complete:session-1",
+    ]);
     expect(result.status).toBe("synced");
   });
 

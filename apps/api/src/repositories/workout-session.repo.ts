@@ -16,16 +16,20 @@ export class WorkoutSessionRepository {
   createSession(input: {
     exerciseLogs: Array<{
       exerciseId: string;
+      id?: string;
       position: number;
     }>;
+    id?: string;
     mesocyclusId: string | null;
     templateId: string;
     userId: string;
   }) {
     return this.client.workoutSession.create({
       data: {
+        ...(input.id ? { id: input.id } : {}),
         exerciseLogs: {
           create: input.exerciseLogs.map((exerciseLog) => ({
+            ...(exerciseLog.id ? { id: exerciseLog.id } : {}),
             exerciseId: exerciseLog.exerciseId,
             position: exerciseLog.position,
           })),
@@ -42,6 +46,28 @@ export class WorkoutSessionRepository {
           },
         },
       },
+    });
+  }
+
+  findSessionForIdempotency(input: { sessionId: string; userId: string }) {
+    return this.client.workoutSession.findFirst({
+      where: { id: input.sessionId, userId: input.userId },
+      include: {
+        exerciseLogs: {
+          orderBy: { position: "asc" },
+        },
+      },
+    });
+  }
+
+  findExerciseForUser(input: { exerciseId: string; userId: string }) {
+    return this.client.exercise.findFirst({
+      where: {
+        deletedAt: null,
+        id: input.exerciseId,
+        OR: [{ isGlobal: true }, { ownerId: input.userId }],
+      },
+      select: { id: true },
     });
   }
 

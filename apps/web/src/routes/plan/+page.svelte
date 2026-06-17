@@ -2,6 +2,7 @@
 import { goto } from "$app/navigation";
 import { type ActivePlan, type EquipmentPool, api } from "$lib/api";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
+import { offlineStore } from "$lib/db/offline-store";
 import { onMount } from "svelte";
 
 const authSession = useAuthSession();
@@ -9,6 +10,7 @@ const authSession = useAuthSession();
 let plan = $state<ActivePlan | null>(null);
 let equipmentPools = $state<EquipmentPool[]>([]);
 let isLoading = $state(true);
+let isOffline = $state(false);
 let isRegenerating = $state(false);
 let screenError = $state<string | null>(null);
 
@@ -30,9 +32,21 @@ function getErrorMessage(error: unknown, fallback: string) {
 async function load() {
   isLoading = true;
   screenError = null;
+  isOffline = false;
 
   if (!navigator.onLine) {
-    screenError = "You're offline. Connect to load your plan.";
+    const cached = await offlineStore.getCachedActivePlan();
+
+    if (cached) {
+      plan = cached.data;
+      selectedPoolId = plan.equipmentPoolId ?? null;
+      selectedCycles = plan.cycleCount;
+      selectedMinutes = plan.sessionMinutes;
+    } else {
+      plan = null;
+      isOffline = true;
+    }
+
     isLoading = false;
     return;
   }
@@ -52,6 +66,7 @@ async function load() {
       selectedPoolId = plan.equipmentPoolId ?? equipmentPools[0]?.id ?? null;
       selectedCycles = plan.cycleCount;
       selectedMinutes = plan.sessionMinutes;
+      await offlineStore.cacheActivePlan(plan);
     } else {
       // 404 means no active plan — that's the empty state, not an error
       const err = planResult.reason as { status?: number };
@@ -145,6 +160,21 @@ function getDotState(
   {#if isLoading}
     <div style="flex: 1; display: flex; align-items: center; padding: var(--space-5) var(--space-4);">
       <p style="color: var(--color-text-muted); margin: 0;">Loading plan…</p>
+    </div>
+
+  {:else if isOffline}
+    <div style="flex: 1; overflow-y: auto; padding: var(--space-5) var(--space-4) 160px;">
+      <div style="max-width: 48rem; margin: 0 auto; display: grid; gap: var(--space-4);">
+        <div style="display: grid; gap: var(--space-3); padding: var(--space-6); background: linear-gradient(160deg, #0f0f1a, #1a1a2e); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-lg);">
+          <p style="margin: 0; color: var(--color-accent); font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;">Offline</p>
+          <h1 style="margin: 0; font-size: clamp(1.5rem, 5vw, 2rem); font-weight: var(--font-weight-display); text-transform: uppercase; letter-spacing: -0.03em;">
+            Plan not cached yet
+          </h1>
+          <p style="margin: 0; color: var(--color-text-secondary); line-height: 1.6;">
+            Connect to the internet once to cache your plan for offline viewing.
+          </p>
+        </div>
+      </div>
     </div>
 
   {:else if !plan}

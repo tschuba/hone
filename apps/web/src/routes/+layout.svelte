@@ -3,10 +3,12 @@ import "../app.css";
 import { registerSW } from "virtual:pwa-register";
 import { onMount } from "svelte";
 
+import { api } from "$lib/api";
 import { createAudioSettings } from "$lib/context/audio-settings.svelte.ts";
 import { createAuthSession } from "$lib/context/auth-session.svelte.ts";
 import { createTimerState } from "$lib/context/timer-state.svelte.ts";
 import { createWorkoutSession } from "$lib/context/workout-session.svelte.ts";
+import { offlineStore } from "$lib/db/offline-store";
 import { getSyncStatus, syncPendingOps } from "$lib/sync";
 
 const authSession = createAuthSession();
@@ -83,7 +85,16 @@ $effect(() => {
 
   lastSyncedUserId = authSession.userId;
   void syncPendingOps()
-    .then(() => refreshSyncState())
+    .then(() => {
+      if (navigator.onLine) {
+        api
+          .getActivePlan()
+          .then((p) => offlineStore.cacheActivePlan(p))
+          .catch(() => {});
+      }
+
+      return refreshSyncState();
+    })
     .catch((error) => {
       console.error("Failed to sync pending offline operations", error);
     });

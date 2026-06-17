@@ -10,7 +10,12 @@ function createTestApp(service: {
     id: string;
     status: string;
   }>;
-  createSession(input: { templateId: string; userId: string }): Promise<{
+  createSession(input: {
+    exerciseLogs?: Array<{ exerciseId: string; id: string; position: number }>;
+    id?: string;
+    templateId: string;
+    userId: string;
+  }): Promise<{
     exerciseLogs: Array<{
       exerciseId: string;
       id: string;
@@ -258,8 +263,15 @@ describe("workout session routes", () => {
   });
 
   it("starts a session for a template owned by the user", async () => {
+    const TEMPLATE_UUID = "11111111-1111-1111-1111-111111111111";
     let receivedInput:
       | {
+          exerciseLogs?: Array<{
+            exerciseId: string;
+            id: string;
+            position: number;
+          }>;
+          id?: string;
           templateId: string;
           userId: string;
         }
@@ -285,7 +297,7 @@ describe("workout session routes", () => {
           ],
           id: "session-start",
           status: "ACTIVE",
-          templateId: "template-a",
+          templateId: TEMPLATE_UUID,
         };
       },
       async listHistory() {
@@ -316,15 +328,15 @@ describe("workout session routes", () => {
     const response = await app.request(
       "http://hone.test/api/v1/workout-sessions",
       {
-        body: JSON.stringify({ templateId: "template-a" }),
+        body: JSON.stringify({ templateId: TEMPLATE_UUID }),
         headers: { "content-type": "application/json" },
         method: "POST",
       },
     );
 
     expect(response.status).toBe(201);
-    expect(receivedInput).toEqual({
-      templateId: "template-a",
+    expect(receivedInput).toMatchObject({
+      templateId: TEMPLATE_UUID,
       userId: "user-1",
     });
 
@@ -342,6 +354,143 @@ describe("workout session routes", () => {
         position: 1,
       },
     ]);
+  });
+
+  it("rejects starting a session with a non-UUID templateId before calling the service", async () => {
+    let createSessionCalled = false;
+
+    const app = createTestApp({
+      async completeSession() {
+        throw new Error("not used");
+      },
+      async createSession() {
+        createSessionCalled = true;
+        return {
+          exerciseLogs: [],
+          id: "session-start",
+          status: "ACTIVE",
+          templateId: "template-a",
+        };
+      },
+      async listHistory() {
+        return [];
+      },
+      async listExerciseSubstitutions() {
+        return [];
+      },
+      async skipSession() {
+        throw new Error("not used");
+      },
+      async substituteExercise() {
+        throw new Error("not used");
+      },
+    });
+
+    const response = await app.request(
+      "http://hone.test/api/v1/workout-sessions",
+      {
+        body: JSON.stringify({ templateId: "not-a-uuid" }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(createSessionCalled).toBe(false);
+  });
+
+  it("rejects starting a session with a non-UUID client-provided session id", async () => {
+    const TEMPLATE_UUID = "11111111-1111-1111-1111-111111111111";
+    let createSessionCalled = false;
+
+    const app = createTestApp({
+      async completeSession() {
+        throw new Error("not used");
+      },
+      async createSession() {
+        createSessionCalled = true;
+        return {
+          exerciseLogs: [],
+          id: "session-start",
+          status: "ACTIVE",
+          templateId: TEMPLATE_UUID,
+        };
+      },
+      async listHistory() {
+        return [];
+      },
+      async listExerciseSubstitutions() {
+        return [];
+      },
+      async skipSession() {
+        throw new Error("not used");
+      },
+      async substituteExercise() {
+        throw new Error("not used");
+      },
+    });
+
+    const response = await app.request(
+      "http://hone.test/api/v1/workout-sessions",
+      {
+        body: JSON.stringify({ id: "not-a-uuid", templateId: TEMPLATE_UUID }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(createSessionCalled).toBe(false);
+  });
+
+  it("rejects starting a session with a non-UUID exercise log id", async () => {
+    const TEMPLATE_UUID = "11111111-1111-1111-1111-111111111111";
+    const EXERCISE_UUID = "22222222-2222-2222-2222-222222222222";
+    let createSessionCalled = false;
+
+    const app = createTestApp({
+      async completeSession() {
+        throw new Error("not used");
+      },
+      async createSession() {
+        createSessionCalled = true;
+        return {
+          exerciseLogs: [],
+          id: "session-start",
+          status: "ACTIVE",
+          templateId: TEMPLATE_UUID,
+        };
+      },
+      async listHistory() {
+        return [];
+      },
+      async listExerciseSubstitutions() {
+        return [];
+      },
+      async skipSession() {
+        throw new Error("not used");
+      },
+      async substituteExercise() {
+        throw new Error("not used");
+      },
+    });
+
+    const response = await app.request(
+      "http://hone.test/api/v1/workout-sessions",
+      {
+        body: JSON.stringify({
+          exerciseLogs: [
+            { exerciseId: EXERCISE_UUID, id: "not-a-uuid", position: 1 },
+          ],
+          templateId: TEMPLATE_UUID,
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(createSessionCalled).toBe(false);
   });
 
   it("lists session history for the owning user", async () => {

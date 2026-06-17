@@ -1,9 +1,24 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
+import { z } from "zod";
 
 import type { AuthVariables } from "../middleware/auth";
 import { authMiddleware } from "../middleware/auth";
 import { WorkoutSessionService } from "../services/workout-session.service";
+
+const createSessionBodySchema = z.object({
+  exerciseLogs: z
+    .array(
+      z.object({
+        exerciseId: z.string().uuid(),
+        id: z.string().uuid(),
+        position: z.number().int().min(1),
+      }),
+    )
+    .optional(),
+  id: z.string().uuid().optional(),
+  templateId: z.string().uuid(),
+});
 
 type WorkoutSessionRouteService = {
   completeSession(input: {
@@ -14,7 +29,12 @@ type WorkoutSessionRouteService = {
     id: string;
     status: string;
   }>;
-  createSession(input: { templateId: string; userId: string }): Promise<{
+  createSession(input: {
+    exerciseLogs?: Array<{ exerciseId: string; id: string; position: number }>;
+    id?: string;
+    templateId: string;
+    userId: string;
+  }): Promise<{
     exerciseLogs: Array<{
       exerciseId: string;
       id: string;
@@ -81,15 +101,27 @@ export function createWorkoutSessionRoutes(
   workoutSessionRoutes.use("*", authGuard);
 
   workoutSessionRoutes.post("/", async (c) => {
-    const body = await c.req.json<{ templateId?: string }>();
+    let rawBody: unknown;
 
-    if (!body.templateId) {
-      return c.json({ status: 400, title: "templateId is required" }, 400);
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ status: 400, title: "Invalid request body" }, 400);
     }
+
+    const parsed = createSessionBodySchema.safeParse(rawBody);
+
+    if (!parsed.success) {
+      return c.json({ status: 400, title: "Invalid request body" }, 400);
+    }
+
+    const { exerciseLogs, id: clientSessionId, templateId } = parsed.data;
 
     try {
       const session = await service.createSession({
-        templateId: body.templateId,
+        exerciseLogs,
+        id: clientSessionId,
+        templateId,
         userId: c.get("userId"),
       });
 
@@ -109,6 +141,13 @@ export function createWorkoutSessionRoutes(
     } catch (error) {
       if (error instanceof Error && error.message === "Template not found") {
         return c.json({ status: 404, title: error.message }, 404);
+      }
+
+      if (
+        error instanceof Error &&
+        error.message === "Exercise not found or not accessible"
+      ) {
+        return c.json({ status: 400, title: error.message }, 400);
       }
 
       return c.json({ status: 400, title: "Unable to start session" }, 400);
