@@ -20,6 +20,7 @@ type SyncApi = Pick<
   | "getActiveWorkout"
   | "logSet"
   | "skipToday"
+  | "startSession"
   | "submitFeedback"
   | "substituteExercise"
   | "updateProfile"
@@ -42,6 +43,7 @@ type SyncStore = Pick<
   | "markWorkoutActive"
   | "queueFeedback"
   | "queueOp"
+  | "queueSessionCreate"
   | "queueSkipToday"
   | "queueSubstitution"
   | "queueWorkoutCompletion"
@@ -115,6 +117,14 @@ async function flushOp(
   store: SyncStore,
 ): Promise<{ terminal: boolean }> {
   switch (op.entityType) {
+    case "session": {
+      await client.startSession(op.payload.templateId, {
+        exerciseLogs: op.payload.exerciseLogs,
+        id: op.payload.sessionId,
+      });
+      return { terminal: false };
+    }
+
     case "set": {
       await client.logSet(op.payload.sessionId, op.payload.set);
       await store.applyQueuedSetToCachedWorkout(
@@ -208,6 +218,7 @@ async function replayPendingOpsOnce(
   }
 
   const orderedOps = [
+    ...ops.filter((op) => op.entityType === "session"),
     ...ops.filter((op) => op.entityType === "substitution"),
     ...ops.filter((op) => op.entityType === "set"),
     ...ops.filter(
@@ -215,6 +226,7 @@ async function replayPendingOpsOnce(
     ),
     ...ops.filter(
       (op) =>
+        op.entityType !== "session" &&
         op.entityType !== "substitution" &&
         op.entityType !== "set" &&
         !(op.entityType === "workout" && op.operation === "complete"),

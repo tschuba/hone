@@ -305,9 +305,25 @@ export const api = {
       method: "POST",
     });
   },
-  startSession(templateId: string) {
+  startSession(
+    templateId: string,
+    options?: {
+      exerciseLogs?: Array<{
+        exerciseId: string;
+        id: string;
+        position: number;
+      }>;
+      id?: string;
+    },
+  ) {
     return request<StartedWorkoutSession>("/workout-sessions", {
-      body: { templateId },
+      body: {
+        templateId,
+        ...(options?.id ? { id: options.id } : {}),
+        ...(options?.exerciseLogs
+          ? { exerciseLogs: options.exerciseLogs }
+          : {}),
+      },
       method: "POST",
     });
   },

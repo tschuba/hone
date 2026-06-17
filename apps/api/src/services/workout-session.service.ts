@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 import { db } from "../db/client";
 import {
   type ExerciseLogWithExercise,
@@ -135,25 +137,77 @@ function resolveNextTemplateId(
 export class WorkoutSessionService {
   constructor(private readonly store: WorkoutSessionStore = db) {}
 
-  async createSession(input: { templateId: string; userId: string }) {
-    return this.store.$transaction(async (tx) => {
-      const repository = new WorkoutSessionRepository(tx);
-      const template = await repository.findTemplateForUser(input);
+  async createSession(input: {
+    exerciseLogs?: Array<{ exerciseId: string; id: string; position: number }>;
+    id?: string;
+    templateId: string;
+    userId: string;
+  }) {
+    try {
+      return await this.store.$transaction(async (tx) => {
+        const repository = new WorkoutSessionRepository(tx);
+        const template = await repository.findTemplateForUser(input);
 
-      if (!template) {
-        throw new Error("Template not found");
+        if (!template) {
+          throw new Error("Template not found");
+        }
+
+        let resolvedExerciseLogs: Array<{
+          exerciseId: string;
+          id?: string;
+          position: number;
+        }>;
+
+        if (input.exerciseLogs) {
+          for (const log of input.exerciseLogs) {
+            const exercise = await repository.findExerciseForUser({
+              exerciseId: log.exerciseId,
+              userId: input.userId,
+            });
+
+            if (!exercise) {
+              throw new Error("Exercise not found or not accessible");
+            }
+          }
+
+          resolvedExerciseLogs = input.exerciseLogs;
+        } else {
+          resolvedExerciseLogs = template.exercises.map((exercise) => ({
+            exerciseId: exercise.exerciseId,
+            position: exercise.position,
+          }));
+        }
+
+        return repository.createSession({
+          exerciseLogs: resolvedExerciseLogs,
+          id: input.id,
+          mesocyclusId: template.mesocyclusId,
+          templateId: template.id,
+          userId: input.userId,
+        });
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        input.id
+      ) {
+        const sessionId = input.id;
+        const existing = await this.store.$transaction(async (tx) => {
+          const repository = new WorkoutSessionRepository(tx);
+          return repository.findSessionForIdempotency({
+            sessionId,
+            userId: input.userId,
+          });
+        });
+
+        if (existing) {
+          return existing;
+        }
       }
 
-      return repository.createSession({
-        exerciseLogs: template.exercises.map((exercise) => ({
-          exerciseId: exercise.exerciseId,
-          position: exercise.position,
-        })),
-        mesocyclusId: template.mesocyclusId,
-        templateId: template.id,
-        userId: input.userId,
-      });
-    });
+      throw error;
+    }
   }
 
   async completeSession(input: { sessionId: string; userId: string }) {

@@ -11,6 +11,7 @@ import {
 } from "$lib/api";
 import ExerciseRow from "$lib/components/ExerciseRow.svelte";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
+import { offlineStore } from "$lib/db/offline-store";
 import {
   getTodayWorkout,
   isOfflineError,
@@ -110,7 +111,12 @@ async function loadDashboard() {
       }
     }
   } catch (error) {
-    screenError = getErrorMessage(error, "Unable to load workout.");
+    if (isOfflineError(error)) {
+      screenError =
+        "You're offline. Open the app while connected to cache your workout.";
+    } else {
+      screenError = getErrorMessage(error, "Unable to load workout.");
+    }
   } finally {
     isLoadingWorkout = false;
   }
@@ -177,8 +183,42 @@ async function handlePrimaryWorkoutAction() {
     await goto("/workout");
   } catch (error) {
     if (isOfflineError(error)) {
-      screenError =
-        "Starting a workout is unavailable offline. Reconnect to begin this session.";
+      const sessionId = crypto.randomUUID();
+      const exercisesWithIds = todayWorkout.exercises.map((e, i) => ({
+        exercise: e,
+        exerciseLogId: crypto.randomUUID(),
+        position: e.position ?? i + 1,
+      }));
+
+      const exerciseLogs = exercisesWithIds.map((item) => ({
+        exerciseId: item.exercise.exerciseId,
+        id: item.exerciseLogId,
+        position: item.position,
+      }));
+
+      await offlineStore.queueSessionCreate(
+        sessionId,
+        todayWorkout.templateId,
+        exerciseLogs,
+      );
+
+      const offlineWorkout: ActiveWorkout = {
+        exercises: exercisesWithIds.map((item) => ({
+          ...item.exercise,
+          completedSets: 0,
+          exerciseLogId: item.exerciseLogId,
+        })),
+        mesocyclusId: todayWorkout.mesocyclusId,
+        sessionId,
+        status: "active_session",
+        templateId: todayWorkout.templateId,
+        templateLabel: todayWorkout.templateLabel,
+        templateTitle: todayWorkout.templateTitle,
+      };
+
+      await offlineStore.cacheActiveWorkout(offlineWorkout);
+      todayWorkout = offlineWorkout;
+      await goto("/workout");
       return;
     }
 
