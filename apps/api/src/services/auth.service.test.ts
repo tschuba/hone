@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "bun:test";
 
 import { AuthService } from "./auth.service";
 
+const TEST_SECRET = "test-secret-for-auth-service-xxxxxxxxxxxxxxxx";
+
 type TestUser = {
   email: string;
   id: string;
@@ -9,73 +11,19 @@ type TestUser = {
   role: string;
 };
 
-type TestSession = {
-  expiresAt: Date;
-  id: string;
-  sessionHash: string;
-  userId: string;
-};
-
-type SessionDeleteWhere = { sessionHash: string } | { userId: string };
-
 function createMockDb() {
   const users = new Map<string, TestUser>();
-  const sessions = new Map<string, TestSession>();
 
   return {
     session: {
-      async create({
-        data,
-      }: {
-        data: { expiresAt: Date; sessionHash: string; userId: string };
-      }) {
-        const session = {
-          ...data,
-          id: crypto.randomUUID(),
-        } satisfies TestSession;
-
-        sessions.set(session.sessionHash, session);
-        return session;
+      async create(_args: unknown) {
+        return {};
       },
-      async deleteMany({ where }: { where: SessionDeleteWhere }) {
-        if ("sessionHash" in where) {
-          const deleted = sessions.delete(where.sessionHash);
-          return { count: deleted ? 1 : 0 };
-        }
-
-        let count = 0;
-
-        for (const [sessionHash, session] of sessions.entries()) {
-          if (session.userId === where.userId) {
-            sessions.delete(sessionHash);
-            count += 1;
-          }
-        }
-
-        return { count };
+      async deleteMany(_args: unknown) {
+        return { count: 0 };
       },
-      async findFirst({
-        where,
-      }: {
-        include: { user: true };
-        where: { expiresAt: { gt: Date }; sessionHash: string };
-      }) {
-        const session = sessions.get(where.sessionHash);
-
-        if (!session || session.expiresAt <= where.expiresAt.gt) {
-          return null;
-        }
-
-        const user = users.get(session.userId);
-
-        if (!user) {
-          return null;
-        }
-
-        return {
-          ...session,
-          user,
-        };
+      async findFirst(_args: unknown) {
+        return null;
       },
     },
     user: {
@@ -113,7 +61,7 @@ describe("AuthService.createLocalUser", () => {
   let authService: AuthService;
 
   beforeEach(() => {
-    authService = new AuthService(createMockDb());
+    authService = new AuthService(createMockDb(), TEST_SECRET);
   });
 
   it("hashes password with argon2", async () => {
@@ -128,7 +76,7 @@ describe("AuthService.createLocalUser", () => {
 
   it("rejects weak passwords", async () => {
     await expect(authService.createLocalUser("a@b.com", "123")).rejects.toThrow(
-      "Password too short",
+      "Password must be at least 12 characters",
     );
   });
 });
@@ -137,10 +85,10 @@ describe("AuthService sessions", () => {
   let authService: AuthService;
 
   beforeEach(() => {
-    authService = new AuthService(createMockDb());
+    authService = new AuthService(createMockDb(), TEST_SECRET);
   });
 
-  it("stores only a hashed session token", async () => {
+  it("issues a signed token that validates to the correct user", async () => {
     const user = await authService.createLocalUser(
       "session@example.com",
       "password12345",
@@ -149,7 +97,6 @@ describe("AuthService sessions", () => {
     const session = await authService.validateSession(rawToken);
 
     expect(session).not.toBeNull();
-    expect(session?.sessionHash).not.toBe(rawToken);
     expect(session?.user.id).toBe(user.id);
   });
 
@@ -169,12 +116,8 @@ describe("AuthService sessions", () => {
 
   it("uses a 1 hour expiry for admin sessions", async () => {
     const before = Date.now();
-    const user = await authService.createLocalUser(
-      "duration-admin@example.com",
-      "password12345",
-    );
     const mockDb = createMockDb();
-    const adminAuthService = new AuthService(mockDb);
+    const adminAuthService = new AuthService(mockDb, TEST_SECRET);
     const adminUser = await adminAuthService.createLocalUser(
       "admin@example.com",
       "password12345",
@@ -198,46 +141,46 @@ describe("AuthService sessions", () => {
     expect(expiryDelta).toBeLessThanOrEqual(1 * 60 * 60 * 1000 + 2_000);
   });
 
-  it("invalidates an existing session", async () => {
+  it("rejects a tampered token", async () => {
     const user = await authService.createLocalUser(
-      "logout@example.com",
+      "tamper@example.com",
       "password12345",
     );
     const rawToken = await authService.createSession(user.id);
+    const tampered = `${rawToken.slice(0, -4)}0000`;
 
-    await authService.invalidateSession(rawToken);
-
-    await expect(authService.validateSession(rawToken)).resolves.toBeNull();
+    await expect(authService.validateSession(tampered)).resolves.toBeNull();
   });
 
-  it("invalidates all sessions for a user", async () => {
+  it("rejects an expired token", async () => {
     const user = await authService.createLocalUser(
-      "revoke@example.com",
+      "expired@example.com",
       "password12345",
     );
-    const firstToken = await authService.createSession(user.id);
-    const secondToken = await authService.createSession(user.id);
+    const pastExpiry = Date.now() - 1000;
+    const payload = `${user.id}.${pastExpiry}`;
+    const crypto2 = await import("node:crypto");
+    const sig = crypto2
+      .createHmac("sha256", TEST_SECRET)
+      .update(payload)
+      .digest("hex");
+    const expiredToken = `${payload}.${sig}`;
 
-    await authService.invalidateUserSessions(user.id);
-
-    await expect(authService.validateSession(firstToken)).resolves.toBeNull();
-    await expect(authService.validateSession(secondToken)).resolves.toBeNull();
+    await expect(authService.validateSession(expiredToken)).resolves.toBeNull();
   });
 
-  it("issues a new session after login and invalidates the old one", async () => {
+  it("issues a new session on each login", async () => {
     const user = await authService.createLocalUser(
       "user@test.com",
       "password12345",
     );
     const oldToken = await authService.createSession(user.id);
-
     const newToken = await authService.loginLocal(
       "user@test.com",
       "password12345",
     );
 
     expect(newToken).not.toBe(oldToken);
-    await expect(authService.validateSession(oldToken)).resolves.toBeNull();
     await expect(authService.validateSession(newToken)).resolves.not.toBeNull();
   });
 });
