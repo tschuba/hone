@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { Prisma } from "@prisma/client";
 
 import {
   WorkoutSessionService,
@@ -80,6 +81,134 @@ describe("WorkoutSessionService", () => {
       status: "ACTIVE",
       templateId: "template-a",
       userId: "user-1",
+    });
+  });
+
+  it("returns the existing session when a client-provided id collides (idempotent retry)", async () => {
+    const existingSession = {
+      exerciseLogs: [
+        { exerciseId: "exercise-1", id: "exercise-log-1", position: 1 },
+      ],
+      id: "client-uuid-1",
+      status: "ACTIVE",
+      templateId: "template-a",
+      userId: "user-1",
+    };
+
+    const service = new WorkoutSessionService(
+      createStore({
+        workoutSession: {
+          create: async () => {
+            throw new Prisma.PrismaClientKnownRequestError(
+              "Unique constraint failed",
+              { clientVersion: "6.8.2", code: "P2002" },
+            );
+          },
+          findFirst: async () => existingSession,
+        },
+        workoutTemplate: {
+          findFirst: async () => ({
+            exercises: [{ exerciseId: "exercise-1", position: 1 }],
+            id: "template-a",
+            mesocyclus: { id: "meso-1" },
+            mesocyclusId: "meso-1",
+          }),
+        },
+      }),
+    );
+
+    const session = await service.createSession({
+      id: "client-uuid-1",
+      templateId: "template-a",
+      userId: "user-1",
+    });
+
+    expect(session).toMatchObject(existingSession);
+  });
+
+  it("rejects exercise logs referencing an exercise the user cannot access", async () => {
+    const service = new WorkoutSessionService(
+      createStore({
+        exercise: {
+          findFirst: async () => null,
+        },
+        workoutTemplate: {
+          findFirst: async () => ({
+            exercises: [{ exerciseId: "exercise-1", position: 1 }],
+            id: "template-a",
+            mesocyclus: { id: "meso-1" },
+            mesocyclusId: "meso-1",
+          }),
+        },
+      }),
+    );
+
+    await expect(
+      service.createSession({
+        exerciseLogs: [
+          { exerciseId: "other-users-exercise", id: "log-1", position: 1 },
+        ],
+        templateId: "template-a",
+        userId: "user-1",
+      }),
+    ).rejects.toThrow("Exercise not found or not accessible");
+  });
+
+  it("creates a session using client-provided exercise log ids when ownership is validated", async () => {
+    const service = new WorkoutSessionService(
+      createStore({
+        exercise: {
+          findFirst: async () => ({ id: "exercise-1" }),
+        },
+        workoutSession: {
+          create: async ({
+            data,
+          }: {
+            data: {
+              exerciseLogs: {
+                create: Array<{
+                  exerciseId: string;
+                  id?: string;
+                  position: number;
+                }>;
+              };
+              id?: string;
+              templateId: string;
+              userId: string;
+            };
+          }) => ({
+            exerciseLogs: data.exerciseLogs.create,
+            id: data.id ?? "server-generated",
+            status: "ACTIVE",
+            templateId: data.templateId,
+            userId: data.userId,
+          }),
+        },
+        workoutTemplate: {
+          findFirst: async () => ({
+            exercises: [{ exerciseId: "exercise-1", position: 1 }],
+            id: "template-a",
+            mesocyclus: { id: "meso-1" },
+            mesocyclusId: "meso-1",
+          }),
+        },
+      }),
+    );
+
+    const session = await service.createSession({
+      exerciseLogs: [
+        { exerciseId: "exercise-1", id: "client-log-1", position: 1 },
+      ],
+      id: "client-session-1",
+      templateId: "template-a",
+      userId: "user-1",
+    });
+
+    expect(session).toMatchObject({
+      exerciseLogs: [
+        { exerciseId: "exercise-1", id: "client-log-1", position: 1 },
+      ],
+      id: "client-session-1",
     });
   });
 
