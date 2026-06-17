@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import argon2 from "argon2";
 
+import { config } from "@hone/shared";
+
 const ADMIN_SESSION_DURATION_MS = 1 * 60 * 60 * 1000;
 const ARGON2_OPTS = {
   memoryCost: 32768,
@@ -14,14 +16,6 @@ type UserRecord = {
   id: string;
   passwordHash: string | null;
   role: string;
-};
-
-type SessionRecord = {
-  expiresAt: Date;
-  id: string;
-  sessionHash: string;
-  user: UserRecord;
-  userId: string;
 };
 
 type AuthDb = {
@@ -42,7 +36,7 @@ type AuthDb = {
         expiresAt: { gt: Date };
         sessionHash: string;
       };
-    }): Promise<SessionRecord | null>;
+    }): Promise<unknown>;
   };
   user: {
     create(args: {
@@ -66,8 +60,15 @@ function getSessionDurationMs(role: UserRecord["role"]) {
     : USER_SESSION_DURATION_MS;
 }
 
+function signPayload(payload: string, secret: string) {
+  return crypto.createHmac("sha256", secret).update(payload).digest("hex");
+}
+
 export class AuthService {
-  constructor(private readonly db: AuthDb) {}
+  constructor(
+    private readonly db: AuthDb,
+    private readonly sessionSecret: string = config.SESSION_SECRET,
+  ) {}
 
   async createLocalUser(email: string, password: string) {
     if (password.length < 12) {
@@ -97,22 +98,11 @@ export class AuthService {
       throw new Error("User not found");
     }
 
-    const rawToken = crypto.randomBytes(32).toString("hex");
-    const sessionHash = crypto
-      .createHash("sha256")
-      .update(rawToken)
-      .digest("hex");
     const expiresAt = new Date(Date.now() + getSessionDurationMs(user.role));
+    const payload = `${userId}.${expiresAt.getTime()}`;
+    const sig = signPayload(payload, this.sessionSecret);
 
-    await this.db.session.create({
-      data: {
-        expiresAt,
-        sessionHash,
-        userId,
-      },
-    });
-
-    return rawToken;
+    return `${payload}.${sig}`;
   }
 
   async loginLocal(email: string, password: string) {
@@ -130,42 +120,51 @@ export class AuthService {
       throw new Error("Invalid credentials");
     }
 
-    await this.db.session.deleteMany({
-      where: { userId: user.id },
-    });
-
     return this.createSession(user.id);
   }
 
-  async invalidateSession(rawToken: string) {
-    const sessionHash = crypto
-      .createHash("sha256")
-      .update(rawToken)
-      .digest("hex");
-
-    await this.db.session.deleteMany({
-      where: { sessionHash },
-    });
+  async invalidateSession(_rawToken: string) {
+    // stateless — cookie is cleared by the route
   }
 
-  async invalidateUserSessions(userId: string) {
-    await this.db.session.deleteMany({
-      where: { userId },
-    });
+  async invalidateUserSessions(_userId: string) {
+    // stateless — no server-side session state to revoke
   }
 
   async validateSession(rawToken: string) {
-    const sessionHash = crypto
-      .createHash("sha256")
-      .update(rawToken)
-      .digest("hex");
+    const lastDot = rawToken.lastIndexOf(".");
+    if (lastDot === -1) return null;
 
-    return this.db.session.findFirst({
-      where: {
-        expiresAt: { gt: new Date() },
-        sessionHash,
-      },
-      include: { user: true },
-    });
+    const payload = rawToken.slice(0, lastDot);
+    const sig = rawToken.slice(lastDot + 1);
+
+    const expectedSig = signPayload(payload, this.sessionSecret);
+    const expectedBuf = Buffer.from(expectedSig, "hex");
+    const actualBuf = Buffer.from(sig, "hex");
+
+    if (
+      expectedBuf.length !== actualBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, actualBuf)
+    ) {
+      return null;
+    }
+
+    const dotIndex = payload.indexOf(".");
+    if (dotIndex === -1) return null;
+
+    const userId = payload.slice(0, dotIndex);
+    const expiryMs = Number(payload.slice(dotIndex + 1));
+
+    if (!userId || Number.isNaN(expiryMs) || Date.now() > expiryMs) {
+      return null;
+    }
+
+    const expiresAt = new Date(expiryMs);
+
+    return {
+      id: sig,
+      expiresAt,
+      user: { id: userId },
+    };
   }
 }

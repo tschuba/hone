@@ -31,6 +31,12 @@ async function load() {
   isLoading = true;
   screenError = null;
 
+  if (!navigator.onLine) {
+    screenError = "You're offline. Connect to load your plan.";
+    isLoading = false;
+    return;
+  }
+
   try {
     const [planResult, poolsResult] = await Promise.allSettled([
       api.getActivePlan(),
