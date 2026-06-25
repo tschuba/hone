@@ -13,7 +13,6 @@ const workoutSession = useWorkoutSession();
 let announcement = $state("Workout summary ready.");
 let errorMessage = $state<string | null>(null);
 let isBusy = $state(false);
-let completionQueued = $state(false);
 let workout = $state<Extract<
   ActiveWorkout,
   { status: "active_session" }
@@ -80,9 +79,16 @@ async function handleCompleteWorkout() {
     const result = await completeWorkoutWithOfflineFallback(workout.sessionId);
 
     if (result.status === "queued") {
-      completionQueued = true;
-      announcement =
-        "Workout completion queued. Reconnect to finish syncing this session.";
+      sessionStorage.setItem(
+        "dashboard-flash",
+        JSON.stringify({
+          kind: "success",
+          message:
+            "Workout completion queued. Reconnect to finish syncing this session.",
+        }),
+      );
+      workoutSession.reset();
+      await goto("/");
       return;
     }
 
@@ -173,14 +179,10 @@ async function handleCompleteWorkout() {
       <button
         type="button"
         onclick={handleCompleteWorkout}
-        disabled={isBusy || completionQueued}
+        disabled={isBusy}
         style="width: 100%; padding: 14px; border: 0; border-radius: var(--radius-lg); background: linear-gradient(135deg, #fcd34d, #f59e0b); color: #111; font-weight: var(--font-weight-display); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 20px rgba(252,211,77,0.25);"
       >
-        {completionQueued
-          ? "Completion queued"
-          : isBusy
-            ? "Completing…"
-            : "Back to Dashboard →"}
+        {isBusy ? "Completing…" : "Back to Dashboard →"}
       </button>
     </section>
   {/if}
