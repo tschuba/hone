@@ -220,9 +220,7 @@ function createStore(
       return 4;
     },
     async queueSubstitution() {},
-    async queueWorkoutCompletion() {
-      return 2;
-    },
+    async queueWorkoutCompletion() {},
     async resetCurrentUserWorkoutState() {},
     async setBlockedSyncReason() {},
     async setCachedAuthUserId() {},
