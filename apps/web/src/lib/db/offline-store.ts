@@ -499,17 +499,40 @@ export class OfflineStore extends Dexie {
   async queueWorkoutCompletion(sessionId: string, userId?: string) {
     const scope = await this.requireCurrentUserId(userId);
 
-    return this.pendingOps.add({
-      createdAt: new Date(),
-      entityId: sessionId,
-      entityType: "workout",
-      operation: "complete",
-      payload: {
-        sessionId,
+    await this.transaction(
+      "rw",
+      this.pendingOps,
+      this.activeWorkout,
+      this.syncMeta,
+      async () => {
+        await this.pendingOps
+          .where("entityId")
+          .equals(sessionId)
+          .filter(
+            (op) =>
+              op.userId === scope &&
+              op.entityType === "workout" &&
+              op.operation === "complete",
+          )
+          .delete();
+
+        await this.pendingOps.add({
+          createdAt: new Date(),
+          entityId: sessionId,
+          entityType: "workout",
+          operation: "complete",
+          payload: {
+            sessionId,
+          },
+          retryCount: 0,
+          userId: scope,
+        });
+
+        await this.activeWorkout.delete(scope);
       },
-      retryCount: 0,
-      userId: scope,
-    });
+    );
+
+    await this.markWorkoutActive(false, scope);
   }
 
   async resetCurrentUserWorkoutState() {

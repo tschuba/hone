@@ -6,6 +6,7 @@ import { type ActiveWorkout, api } from "$lib/api";
 import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
 import ExerciseRow from "$lib/components/ExerciseRow.svelte";
 import { useWorkoutSession } from "$lib/context/workout-session.svelte.ts";
+import { setDashboardFlash } from "$lib/dashboard-flash";
 import { completeWorkoutWithOfflineFallback, getTodayWorkout } from "$lib/sync";
 
 const workoutSession = useWorkoutSession();
@@ -79,14 +80,11 @@ async function handleCompleteWorkout() {
     const result = await completeWorkoutWithOfflineFallback(workout.sessionId);
 
     if (result.status === "queued") {
-      sessionStorage.setItem(
-        "dashboard-flash",
-        JSON.stringify({
-          kind: "success",
-          message:
-            "Workout completion queued. Reconnect to finish syncing this session.",
-        }),
-      );
+      setDashboardFlash({
+        kind: "success",
+        message:
+          "Workout completion queued. Reconnect to finish syncing this session.",
+      });
       workoutSession.reset();
       await goto("/");
       return;

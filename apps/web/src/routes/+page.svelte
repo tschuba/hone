@@ -1,5 +1,4 @@
 <script lang="ts">
-import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
 import { onMount } from "svelte";
 
@@ -11,6 +10,7 @@ import {
 } from "$lib/api";
 import ExerciseRow from "$lib/components/ExerciseRow.svelte";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
+import { consumeDashboardFlash } from "$lib/dashboard-flash";
 import { offlineStore } from "$lib/db/offline-store";
 import {
   getTodayWorkout,
@@ -20,7 +20,6 @@ import {
 } from "$lib/sync";
 
 const authSession = useAuthSession();
-const DASHBOARD_FLASH_KEY = "dashboard-flash";
 
 // biome-ignore lint/style/useConst: Svelte $state values are updated through bindings.
 let email = $state("demo@hone.local");
@@ -51,36 +50,19 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 function applyDashboardFlash() {
-  if (!browser) {
+  const flash = consumeDashboardFlash();
+
+  if (!flash) {
     return;
   }
 
-  const rawFlash = sessionStorage.getItem(DASHBOARD_FLASH_KEY);
-
-  if (!rawFlash) {
+  if (flash.kind === "success") {
+    planSuccess = flash.message;
+    screenError = null;
     return;
   }
 
-  sessionStorage.removeItem(DASHBOARD_FLASH_KEY);
-
-  try {
-    const flash = JSON.parse(rawFlash) as {
-      kind?: "error" | "success";
-      message?: string;
-    };
-
-    if (flash.kind === "success" && typeof flash.message === "string") {
-      planSuccess = flash.message;
-      screenError = null;
-      return;
-    }
-
-    if (flash.kind === "error" && typeof flash.message === "string") {
-      screenError = flash.message;
-    }
-  } catch {
-    // Ignore malformed flash data and continue normally.
-  }
+  screenError = flash.message;
 }
 
 async function loadDashboard() {
@@ -112,8 +94,7 @@ async function loadDashboard() {
     }
   } catch (error) {
     if (isOfflineError(error)) {
-      screenError =
-        "You're offline. Open the app while connected to cache your workout.";
+      screenError = "You're offline. Reconnect to load your next workout.";
     } else {
       screenError = getErrorMessage(error, "Unable to load workout.");
     }
@@ -589,7 +570,7 @@ function formatTimestamp(value: string | null) {
       {/if}
 
       {#if planSuccess}
-        <p style="margin: 0; padding: var(--space-4); border-radius: var(--radius-md); background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.35); color: var(--color-success);">
+        <p role="status" aria-live="polite" style="margin: 0; padding: var(--space-4); border-radius: var(--radius-md); background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.35); color: var(--color-success);">
           {planSuccess}
         </p>
       {/if}

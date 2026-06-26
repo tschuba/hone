@@ -356,7 +356,7 @@ export async function getTodayWorkout(
 
     if (!cachedWorkout) {
       throw createOfflineUnavailableError(
-        "Offline data is not available yet. Open the app once while online to cache your workout.",
+        "Your next workout isn't available offline yet. Reconnect to load it.",
       );
     }
 

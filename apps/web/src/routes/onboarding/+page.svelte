@@ -9,6 +9,7 @@ import {
   api,
 } from "$lib/api";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
+import { type DashboardFlash, setDashboardFlash } from "$lib/dashboard-flash";
 
 type Step = "welcome" | "goals" | "equipment" | "constraints" | "ready";
 type OnboardingFormData = {
@@ -21,7 +22,6 @@ type OnboardingFormData = {
 
 const authSession = useAuthSession();
 const DRAFT_STORAGE_KEY = "onboarding-draft";
-const DASHBOARD_FLASH_KEY = "dashboard-flash";
 const STEP_ORDER: Step[] = [
   "welcome",
   "goals",
@@ -260,12 +260,7 @@ async function completeOnboarding() {
       resolvedPoolId = pool.id;
     }
 
-    let dashboardFlash:
-      | {
-          kind: "error" | "success";
-          message: string;
-        }
-      | undefined;
+    let dashboardFlash: DashboardFlash | undefined;
 
     try {
       await api.createPlan({
@@ -291,10 +286,7 @@ async function completeOnboarding() {
     if (browser) {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
       if (dashboardFlash) {
-        sessionStorage.setItem(
-          DASHBOARD_FLASH_KEY,
-          JSON.stringify(dashboardFlash),
-        );
+        setDashboardFlash(dashboardFlash);
       }
     }
 

@@ -1,7 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 
 import type { ActiveWorkout, SetPayload } from "$lib/api";
-import type { PendingOp } from "$lib/db/offline-store";
+import { type PendingOp, offlineStore } from "$lib/db/offline-store";
 
 import {
   completeWorkoutWithOfflineFallback,
@@ -276,7 +276,7 @@ describe("sync helpers", () => {
     ).rejects.toEqual({
       status: 503,
       title:
-        "Offline data is not available yet. Open the app once while online to cache your workout.",
+        "Your next workout isn't available offline yet. Reconnect to load it.",
     });
   });
 
@@ -937,5 +937,40 @@ describe("sync helpers", () => {
         sessionId: "session-1",
       },
     ]);
+  });
+});
+
+describe("getTodayWorkout after a queued offline completion", () => {
+  let testCounter = 0;
+
+  beforeEach(async () => {
+    await offlineStore.open();
+    testCounter += 1;
+  });
+
+  it("no longer returns the stale completed workout, instead of looping it back as resumable", async () => {
+    const userId = `user-sync-${testCounter}`;
+    await offlineStore.setCachedAuthUserId(userId);
+    await offlineStore.cacheActiveWorkout(createCachedWorkout(), userId);
+
+    const offlineClient = createClient({
+      async completeWorkoutSession() {
+        throw new TypeError("Failed to fetch");
+      },
+      async getActiveWorkout() {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+
+    const completion = await completeWorkoutWithOfflineFallback("session-1", {
+      client: offlineClient,
+      store: offlineStore,
+    });
+
+    expect(completion).toEqual({ status: "queued" });
+
+    await expect(
+      getTodayWorkout({ client: offlineClient, store: offlineStore }),
+    ).rejects.toMatchObject({ status: 503 });
   });
 });
