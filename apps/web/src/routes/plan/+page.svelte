@@ -3,6 +3,7 @@ import { goto } from "$app/navigation";
 import { type ActivePlan, type EquipmentPool, api } from "$lib/api";
 import { useAuthSession } from "$lib/context/auth-session.svelte.ts";
 import { offlineStore } from "$lib/db/offline-store";
+import { isOfflineError } from "$lib/sync";
 import { onMount } from "svelte";
 
 const authSession = useAuthSession();
@@ -112,7 +113,12 @@ async function handleRegenerate() {
     });
     await load();
   } catch (error) {
-    screenError = getErrorMessage(error, "Unable to generate plan.");
+    if (isOfflineError(error)) {
+      screenError =
+        "Generating a new plan requires an internet connection. Reconnect and try again.";
+    } else {
+      screenError = getErrorMessage(error, "Unable to generate plan.");
+    }
   } finally {
     isRegenerating = false;
   }

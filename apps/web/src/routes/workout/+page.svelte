@@ -276,7 +276,12 @@ async function handleToggleSubstitutions() {
     substitutions = response.items;
     showSubstitutions = true;
   } catch (error) {
-    errorMessage = getErrorMessage(error, "Unable to load substitutions.");
+    if (isOfflineError(error)) {
+      errorMessage =
+        "Swapping exercises requires an internet connection. Reconnect and try again.";
+    } else {
+      errorMessage = getErrorMessage(error, "Unable to load substitutions.");
+    }
   } finally {
     isLoadingSubstitutions = false;
   }

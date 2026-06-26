@@ -144,6 +144,28 @@ describe("OfflineStore", () => {
     expect(cached).toBeUndefined();
   });
 
+  it("dedupes queued workout completions and clears the cached workout", async () => {
+    const userId = nextUserId();
+
+    await offlineStore.cacheActiveWorkout(createWorkout(), userId);
+
+    await offlineStore.queueWorkoutCompletion("session-1", userId);
+    await offlineStore.queueWorkoutCompletion("session-1", userId);
+
+    const ops = await offlineStore.listPendingOps(userId);
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      entityId: "session-1",
+      entityType: "workout",
+      operation: "complete",
+      payload: { sessionId: "session-1" },
+      userId,
+    });
+
+    expect(await offlineStore.getCachedActiveWorkout(userId)).toBeUndefined();
+    expect(await offlineStore.getWorkoutActive(userId)).toBe(false);
+  });
+
   it("does not delete pending ops when the workout cache expires past 48h", async () => {
     const userId = nextUserId();
     const fiftyHoursAgo = new Date(Date.now() - 50 * 60 * 60 * 1000);

@@ -11,20 +11,20 @@ export function getErrorStatus(error: unknown) {
 }
 
 export function isBackendUnavailableError(error: unknown) {
+  const status = getErrorStatus(error);
+
+  if (status !== undefined) {
+    return status === 502 || status === 503 || status === 504;
+  }
+
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return true;
   }
 
-  if (
+  return (
     error instanceof TypeError &&
     /failed to fetch|networkerror|load failed/i.test(error.message)
-  ) {
-    return true;
-  }
-
-  const status = getErrorStatus(error);
-
-  return status === 502 || status === 503 || status === 504;
+  );
 }
 
 export function createOfflineUnavailableError(title: string) {
