@@ -20,3 +20,6 @@ uploads/
 
 # Superpowers files
 .superpowers
+
+.claude/*
+!.claude/agents
